@@ -2,7 +2,7 @@
 
 ## Overview
 
-D&D encounter manager and initiative tracker for DMs running combat. Single self-contained HTML file at `encounter/index.html`. No server, no accounts, no dependencies — IndexedDB persistence (with localStorage fallback).
+D&D encounter manager and initiative tracker for DMs running combat. Single self-contained HTML file at `index.html`. No server, no accounts, no dependencies — IndexedDB persistence (with localStorage fallback).
 
 Built for heroic/homebrew D&D — CR100 monsters, level 60 players, non-standard rules are expected use cases.
 
@@ -177,7 +177,7 @@ Users copy JSON from the 5etools website via clipboard (not file download). The 
 
 Verified against official JSON schema (v1.21.60 from `TheGiddyLimit/5etools-utils`) and 6 real samples: The World Ender (CR 30 aberration, homebrew), Goblin Warrior (CR 1/4, MCDM), Goblin Archer (CR 1/4, LotR homebrew), Werewolf (CR 3, XMM 2024), Vampire (CR 13, XMM 2024), Pit Fiend (CR 20, XMM 2024).
 
-Full schema reference: `tools/resources/5ETOOLS_CREATURE_SCHEMA.md`
+Full schema reference: `5ETOOLS_CREATURE_SCHEMA.md` (in the tools repo at `references/5ETOOLS_CREATURE_SCHEMA.md`)
 
 Fields we care about (fields we ignore are documented in the schema reference):
 
