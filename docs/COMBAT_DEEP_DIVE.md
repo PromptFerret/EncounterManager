@@ -127,9 +127,9 @@ Click a card to resume that combat. From inside an active combat, click **<< Lis
 
 ### Use Cases
 
-- Split party encounters (two groups fighting in different rooms)
-- Parallel combats at different tables
-- A running encounter that gets interrupted by a second fight
+- **Session breaks** - combat not finished when the session ends? Leave it. Come back next week (or next month) and pick up exactly where you left off. Start other combats in the meantime without losing state.
+- **Split party** - two groups fighting in different rooms, each with their own initiative and round count
+- **Interruptions** - a running encounter gets interrupted by a second fight elsewhere
 
 ## Ending Combat
 
