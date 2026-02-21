@@ -2,7 +2,7 @@
 
 # Combat Deep Dive
 
-This guide covers the advanced combat features - conditions, concentration, legendary actions and resistances, feature use tracking, and running multiple combats. For the basics (initiative, turns, HP, attacks), see [Running Combat](RUNNING_COMBAT.md).
+This guide covers the advanced combat features - conditions, concentration, legendary actions and resistances, feature use tracking, reactions, and running multiple combats. For the basics (initiative, turns, HP, attacks, adding combatants), see [Running Combat](RUNNING_COMBAT.md).
 
 ## Conditions
 
@@ -106,6 +106,15 @@ Features with a recharge range (e.g., "5-6") show "(Recharge 5-6)" in yellow nex
 When uses are at 0 and a recharge range is set, a **Roll Recharge** button (yellow) appears. Clicking it rolls 1d6. If the result falls within the recharge range, all uses are restored. If not, nothing happens. The result is logged in the roll log either way.
 
 The DM decides when to roll recharge - typically at the start of the creature's turn, following standard D&D rules.
+
+## Reactions
+
+Each combatant row in the initiative list includes a reaction indicator (**R**) on the right side.
+
+- **Green circle** - reaction is available
+- **Red circle** - reaction has been used this round
+
+Click the indicator to toggle between available and used. Reactions automatically reset to available (green) at the start of the combatant's turn.
 
 ## Multi-Combat
 
