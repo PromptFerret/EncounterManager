@@ -21,7 +21,7 @@ The `docs/` folder contains user-facing documentation rendered via MarkdownSite 
 | `docs/IMPORT_EXPORT.md` | Backups, restoring, sharing, SquishText format |
 | `docs/MONSTER_FORMAT.md` | JSON schema reference for external monster creation |
 
-Docs are linked from the app footer and README. Update docs when features change.
+Docs are linked from the app footer and README. **When features, schemas, or usage change, update all affected files**: `docs/` files, this `CLAUDE.md`, and `PLAN.md`. Verify accuracy before committing - stale docs cause bugs in future sessions.
 
 ## Code Map
 
