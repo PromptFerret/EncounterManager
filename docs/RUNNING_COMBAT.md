@@ -27,7 +27,7 @@ When all players have initiative values, click **Begin Combat** to sort everyone
 ### Top Bar
 
 - **Round N** badge showing the current round
-- **<< Prev** to go back one turn
+- **<< Prev** to go back one turn (disabled at round 1 first combatant - there is no prior turn)
 - **Next >>** to advance to the next turn (this is the button you will click most)
 - **+ Add** to add a combatant mid-combat (see [Adding Combatants](#adding-combatants) below)
 - **End Combat** to end and remove the combat
@@ -43,7 +43,7 @@ A collapsed row shows:
 - **HP bar** (monsters only) - color-coded green/yellow/red based on remaining HP, showing current(+temp)/max
 - **R** (reaction indicator) - green circle when available, red when used. Click to toggle. Automatically resets to green at the start of the combatant's turn.
 
-Click any row to expand its detail panel.
+Click any row to expand its detail panel. The active combatant's panel auto-expands when their turn starts and auto-collapses when the turn advances. This state persists across page refreshes.
 
 ## Expanded Detail Panel (Monsters)
 
@@ -94,7 +94,15 @@ Shows all six scores with modifiers (e.g., "STR 16 (+3)"). Each has two buttons:
 
 **Features** - each feature from the template with its description. Dice notation in the text (like `2d6+3`) is clickable and rolls to the log. Features with recharge and use tracking are covered in [Combat Deep Dive](COMBAT_DEEP_DIVE.md).
 
-**Tactics** - the DM notes from the template, if any.
+### Tactics & Descriptions Accordion
+
+At the bottom of the monster's detail panel (below conditions and concentration), a collapsible **Tactics & Descriptions** section appears if any of these fields have content:
+
+- **Tactics** - DM notes about how the monster fights
+- **Player Description** - flavor text the DM can read aloud
+- **DM Description** - lore and SRD reference text
+
+Each entry is displayed in a card box with a **Copy** button for quick clipboard access (useful for pasting into chat). The accordion is collapsed by default to stay out of the way.
 
 ## Expanded Detail Panel (Players)
 

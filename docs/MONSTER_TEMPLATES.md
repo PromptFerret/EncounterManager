@@ -111,7 +111,7 @@ Two optional text fields for reference during combat:
 - **Player Description** - what the creature looks like, sounds like, smells like. Flavor text the DM can read aloud or reference when a player asks about the creature.
 - **DM Description** - lore, behavior patterns, SRD reference text, or background info. Private to the DM.
 
-Both descriptions are accessible during combat via a collapsible "Descriptions" section at the bottom of the monster's detail panel. The section stays collapsed by default and only appears if at least one description has content.
+Both descriptions (along with Tactics) are accessible during combat via a collapsible "Tactics & Descriptions" accordion at the bottom of the monster's detail panel. Each entry is displayed as a card box with a **Copy** button for easy clipboard access. The accordion stays collapsed by default and only appears if at least one of the three fields has content.
 
 ## Editing and Deleting
 

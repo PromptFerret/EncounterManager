@@ -187,9 +187,9 @@ The active combatant's detail panel is always expanded during their turn.
 - The active combatant's panel **cannot be collapsed** during their turn (disable the collapse toggle for `combat.combatants[combat.turn]`)
 - When the turn advances past them, the panel collapses back (unless it was manually expanded before their turn)
 - Previous turn's panel: if it was already expanded before auto-expand, leave it open. If it was auto-expanded, collapse it on turn advance.
-- Track with a transient `autoExpandedId` variable (not persisted). Set when auto-expanding a previously-collapsed panel. Cleared on turn advance after collapsing.
+- Track with `autoExpandedId` variable (persisted in `state.preferences`). Set when auto-expanding a previously-collapsed panel. Cleared on turn advance after collapsing.
 
-## Phase 4.5 - Monster Descriptions (done)
+## Phase 4.5 - Monster Descriptions & Combat Polish (done)
 
 Two new text fields on monster templates for in-combat reference:
 
@@ -202,7 +202,15 @@ Both fields are textareas in a new "Descriptions" section at the bottom of the t
 
 ### Combat Detail Panel
 
-Shown as a collapsible accordion at the very bottom of the monster's detail panel (below concentration). Collapsed by default - click to expand/collapse. Only renders if at least one description has content. Player description labeled in accent color, DM description in warning color.
+Tactics, player description, and DM description shown in a collapsible "Tactics & Descriptions" accordion at the bottom of the monster's detail panel (below concentration). Collapsed by default. Each entry displayed as a card box (dark background, rounded corners) with a Copy button for clipboard access. Only renders if at least one field (tactics, playerDescription, or dmDescription) has content. Player description labeled in accent color, DM description in warning color, tactics in muted color.
+
+### Combat UI Polish
+
+- Chk/Save ability buttons styled as `btn-accent` (matching the Add button under conditions)
+- Status bar (`#statusEl`) reserves fixed height when empty (`border-bottom: none` instead of `display: none`) to prevent layout bounce
+- Combat bar uses compact padding (`0.35rem`) and combat view has no top padding to prevent size shift on scroll with sticky positioning
+- `activeCombatId` and `autoExpandedId` persisted in `state.preferences` - combat and auto-expanded panel survive page refresh
+- Prev button disabled at round 1, first combatant (no prior turn to go back to)
 
 ## Phase 5 - Combat Overrides (In-Combat Monster Editing)
 
@@ -506,7 +514,8 @@ Implement as `strip5eToolsTags(text)` - regex-based, handles nested tags. Run in
 | `mythic[]` | `features[]` (appended) | Mythic actions → features with `"(Mythic)"` appended to name |
 | - | `legendaryResistances` | Extract from traits if "Legendary Resistance" trait exists, parse `"(N/Day)"`. Ignore lair variant. |
 | - | `tactics` | `""` (empty - not in 5etools data) |
-| - | `groups` | `[]` |
+| - | `playerDescription` | `""` (empty - not in 5etools data) |
+| - | `dmDescription` | `""` (empty - not in 5etools data) |
 | - | `critRange` | `20` (default) |
 
 #### Proficiency Bonus from CR (for initiative calculation)
@@ -617,4 +626,4 @@ Never interpolate user strings into inline `onclick`/`onchange` handlers. Use UU
 Roll logs are stored on combatant instances and saved to localStorage. They survive page refreshes, panel toggles, and re-renders. Cleared only when that combatant's turn starts again. This is intentional - DMs need to reference past rolls when players contest results or use reactions retroactively (Silvery Barbs, Shield, etc.).
 
 ### Combat State Machine
-`state.combats` is an array of combat objects. `activeCombatId` (transient, not persisted) selects which combat is displayed. `getActiveCombat()` returns the selected combat or null. `round: 0` = initiative setup phase. `round: 1+` = active combat. Combat view dispatches: empty → combat list → party select → init setup → active combat.
+`state.combats` is an array of combat objects. `activeCombatId` (persisted in `state.preferences`) selects which combat is displayed. `getActiveCombat()` returns the selected combat or null. `round: 0` = initiative setup phase. `round: 1+` = active combat. Combat view dispatches: empty → combat list → party select → init setup → active combat.

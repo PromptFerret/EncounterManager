@@ -93,8 +93,8 @@ All forms (template, party, encounter) follow Save/Close/Cancel with dirty track
 ### State Management
 ```javascript
 let state = { templates: [], encounters: [], parties: [], combats: [], preferences: { view: 'templates' } };
-let activeCombatId = null; // transient, not persisted - ID of the combat being viewed
-let autoExpandedId = null; // transient - combatant ID auto-expanded on turn start
+let activeCombatId = null; // persisted in state.preferences - ID of the combat being viewed
+let autoExpandedId = null; // persisted in state.preferences - combatant ID auto-expanded on turn start
 ```
 - `state.combats` is an array of combat objects (supports multiple simultaneous combats)
 - `getActiveCombat()` returns the combat matching `activeCombatId`, or null
@@ -273,7 +273,7 @@ User input flows through `this.value` in onchange handlers (reads from DOM eleme
 - **Phase 4.2** (done): Combat reinforcements - replaced browser `prompt()` with proper modal for adding combatants (three modes: ad-hoc, player, or templated monsters with full stat blocks). Searchable monster picker in modal (separate DOM IDs from encounter form picker). Retroactive numbering when adding more of the same template. Replaced custom condition `prompt()` with inline text input. Extracted `createMonsterCombatant()` helper from `launchCombat()`.
 - **Phase 4.3** (done): View persistence - active tab saved to `state.preferences` in IndexedDB, restored on load. Included in backup export/import.
 - **Phase 4.4** (done): Cleanup & active combatant UX - removed dead `groups` field and unused `damageLog` from combat state, IndexedDB/localStorage cleanup for old keys. Auto-expand active combatant panel on turn start (auto-collapse previous), prevent collapse during active turn.
-- **Phase 4.5** (done): Monster descriptions - `playerDescription` and `dmDescription` fields on templates. Shown in combat detail panel as a collapsible accordion (collapsed by default, at bottom of panel). Player description for read-aloud flavor text, DM description for lore/SRD reference.
+- **Phase 4.5** (done): Monster descriptions and combat polish. Added `playerDescription` and `dmDescription` fields on templates. Tactics, player description, and DM description shown in a collapsible "Tactics & Descriptions" accordion at the bottom of the combat detail panel (collapsed by default), each as a card box with a Copy button. Chk/Save ability buttons styled as `btn-accent`. Status bar reserves fixed height (no layout bounce). Combat bar compact sizing with no top padding on combat view. `activeCombatId` and `autoExpandedId` persisted in preferences (survive refresh). Prev button disabled at round 1 first combatant.
 - **Phase 5** (future): Combat overrides - in-combat monster editing with sparse delta overrides (`deepMerge` + `sparseOverrides`). Single edit, batch edit mode with checkbox selection (same-template only), per-field reset, visual indicators for overridden values. No adding/removing array elements.
 - **Phase 6+** (future): External importers - 5etools, CritterDB, Bestiary Builder (each in own phase). See `PLAN.md` for details.
 
@@ -290,7 +290,7 @@ User input flows through `this.value` in onchange handlers (reads from DOM eleme
 - `applyTurnStartEffects()` is the single consolidated turn-start hook - all turn-start additions go here, not in `nextTurn()` or `editInit()` directly
 - Recharge rolls are DM-initiated (notification + button), NOT auto-rolled on turn start
 - **Button classes**: Use `.btn-accent`, `.btn-success`, `.btn-warning`, `.btn-danger` for colored buttons - never inline `style="color:var(--accent)"` as it breaks hover contrast. Each class has proper `:hover` with `color: white !important`. `.btn-remove` is the global class for × delete/remove buttons (red border, red text, red bg on hover).
-- **Multi-combat**: All combat functions use `getActiveCombat()` instead of `state.combat`. `activeCombatId` is transient (not persisted). `saveCombat()` saves the entire `state.combats` array. Migration from old single-combat format (`pf_enc_combat`) is automatic in `load()`.
+- **Multi-combat**: All combat functions use `getActiveCombat()` instead of `state.combat`. `activeCombatId` is persisted in `state.preferences` (restored on load). `saveCombat()` saves the entire `state.combats` array plus `activeCombatId` and `autoExpandedId` to preferences. Migration from old single-combat format (`pf_enc_combat`) is automatic in `load()`.
 - **Searchable monster picker**: Encounter form uses `filterMonsterPicker()` + `selectMonster()` with a `.search-select` dropdown. Monster ID stored in `data-template-id` on the input element.
 - **Import/Export**: Uses embedded SquishText-compatible compression (deflate-raw + CRC32). `.squishtext` file extension. SquishText format only (no JSON fallback). Smart merge on import - skips duplicates by ID, keeps existing data, adds new items only.
 - **Save Backup / Load Backup**: Full data backup/restore. Load Backup uses direct file picker (no modal). Save Backup downloads `.squishtext` file.
