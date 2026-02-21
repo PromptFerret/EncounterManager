@@ -153,6 +153,38 @@ New field on monster template:
 
 ## Future Phases
 
+### Phase 4.2 - Combat Reinforcements & Modal Cleanup
+
+Replace browser `prompt()` dialogs with proper modals and add the ability to insert templated monsters into running combat.
+
+#### Add Combatant Modal
+The existing "+ Add" button in the combat bar and initiative setup currently uses `prompt()` for a name. Replace with a modal dialog offering two paths:
+
+1. **Ad-hoc combatant** (lair action, environment effect, reinforcement NPC)
+   - Name text input (replaces the browser prompt)
+   - Optional initiative input (defaults to 20 for active combat, blank for init setup)
+   - Creates the same type:'adhoc' combatant as today
+
+2. **Template monster** (reinforcements, summoned creatures, late arrivals)
+   - Searchable monster picker (reuse the `.search-select` pattern from the encounter form)
+   - Quantity input (1-20, default 1)
+   - Optional initiative input (pre-rolled from template like combat launch, but editable)
+   - For each monster: roll HP from formula, roll initiative with template's initBonus/initAdvantage, create full type:'monster' combatant instance with templateId link
+   - Numbered names if qty > 1 (same naming logic as `launchCombat`)
+
+#### Behavior
+- Modal replaces `prompt()` in both active combat ("+ Add" in combat bar) and initiative setup ("+ Add Combatant")
+- New combatants insert into initiative order sorted by their init value
+- If combat is active (round >= 1), new combatants get a turn in the current round if their init is ahead of the current turn; otherwise they join the next round's rotation naturally
+- Template monsters get full stat blocks, attacks, features, legendary actions - identical to monsters added via encounter launch
+
+#### Implementation
+- New `showAddCombatantModal()` function - renders modal HTML, handles both paths
+- Reuse `filterMonsterPicker()` / `selectMonster()` from encounter form (may need to generalize if currently tied to form DOM)
+- Reuse combatant creation logic from `launchCombat()` - extract into shared helper
+- Remove all `prompt()` calls from combat code
+- Also replace `prompt()` in the Custom condition flow (currently uses `prompt("Custom condition name:")`)
+
 ### Phase 5 - 5etools Importer
 
 #### Importer Architecture Pattern (applies to all future importers)
