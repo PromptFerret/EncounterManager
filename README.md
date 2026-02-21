@@ -39,6 +39,15 @@ D&D encounter manager and initiative tracker for DMs running combat. Build monst
 - Per-monster export/import with multiselect
 - Smart merge on import — skips duplicates, keeps existing data
 
+## Example Data
+
+Download [mythborne-monsters.squishtext](https://github.com/PromptFerret/EncounterManager/blob/main/examples/mythborne-monsters.squishtext) and import it via **Load Backup** to see the tool in action — includes 3 monster templates, a party, an encounter, and an active combat ready to play.
+
+Individual monsters for **Import Monster**:
+- [minotaur.squishtext](https://github.com/PromptFerret/EncounterManager/blob/main/examples/minotaur.squishtext) — CR 3 Large bruiser with Charge, Gore, and Reckless
+- [griffin.squishtext](https://github.com/PromptFerret/EncounterManager/blob/main/examples/griffin.squishtext) — CR 2 Large flyer with multiattack and Pounce
+- [basilisk.squishtext](https://github.com/PromptFerret/EncounterManager/blob/main/examples/basilisk.squishtext) — CR 3 Medium with Petrifying Gaze and poison bite
+
 ## Getting Started
 
 ### Use it online
