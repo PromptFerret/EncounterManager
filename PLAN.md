@@ -83,10 +83,9 @@ New field on monster template:
 }
 ```
 
-### Deferred to Phase 4+
+### Deferred to Backlog
 - Surprise round handling
 - Dynamic notes/riders with round expiry
-- Template override highlighting
 - Damage log (collapsible panel)
 
 ## Phase 3.5 - IndexedDB Migration + No-Cache (done)
@@ -171,7 +170,7 @@ Replaced browser `prompt()` dialogs with proper modals and added the ability to 
 - Preferences included in backup exports and restored on import
 - Valid views validated against whitelist: `templates`, `parties`, `encounters`, `combat`
 
-## Phase 4.4 - Cleanup & Active Combatant UX
+## Phase 4.4 - Cleanup & Active Combatant UX (done)
 
 ### Dead Code Cleanup
 

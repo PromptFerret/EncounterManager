@@ -791,7 +791,6 @@ const SIZES = ['Tiny', 'Small', 'Medium', 'Large', 'Huge', 'Gargantuan'];
 const CONDITIONS = ['Blinded','Charmed','Deafened','Frightened','Grappled','Incapacitated','Invisible','Paralyzed','Petrified','Poisoned','Prone','Restrained','Stunned','Unconscious'];
 const STORAGE_KEYS = {
   templates: 'pf_enc_templates',
-  groups: 'pf_enc_groups',
   encounters: 'pf_enc_encounters',
   parties: 'pf_enc_parties',
   combats: 'pf_enc_combats',
@@ -804,7 +803,6 @@ const STORAGE_KEYS = {
 
 let state = {
   templates: [],
-  groups: [],
   encounters: [],
   parties: [],
   combats: [],
@@ -817,6 +815,7 @@ let formData = null;   // working copy of the item being edited
 let savedFormSnapshot = null; // snapshot of formData at last save, for dirty checking
 let searchQuery = '';
 let activeCombatId = null; // transient - ID of the combat currently being viewed
+let autoExpandedId = null; // transient - combatant ID that was auto-expanded on turn start
 
 function getActiveCombat() {
   if (!activeCombatId) return null;
@@ -873,8 +872,7 @@ function newTemplate() {
     attacks: [], // each: { name, bonus, note, damages: [{ dice, type, note }] }
     multiattack: '',
     features: [],
-    legendaryActionBudget: 0, legendaryActions: [], legendaryResistances: 0,
-    groups: []
+    legendaryActionBudget: 0, legendaryActions: [], legendaryResistances: 0
   };
 }
 
@@ -946,10 +944,11 @@ async function load() {
       } catch (e) { /* best effort */ }
       console.log('Migrated single combat to combats array');
     }
-    // Clean up old shared player roster key (Phase 4.1 - players now per-party)
+    // Clean up old keys (Phase 4.1: shared player roster, Phase 4.4: dead groups field)
     try {
       const tx2 = _db.transaction(DB_STORE, 'readwrite');
       tx2.objectStore(DB_STORE).delete('pf_enc_players');
+      tx2.objectStore(DB_STORE).delete('pf_enc_groups');
     } catch (e) { /* best effort */ }
     // Auto-migrate from localStorage if IndexedDB was empty
     if (!hasIdbData && oldCombat === undefined) {
@@ -974,7 +973,7 @@ async function load() {
         for (const [k, skey] of Object.entries(STORAGE_KEYS)) {
           try { _db.transaction(DB_STORE, 'readwrite').objectStore(DB_STORE).put(state[k], skey); } catch (e) { /* best effort */ }
         }
-        for (const skey of [...Object.values(STORAGE_KEYS), 'pf_enc_combat', 'pf_enc_players']) {
+        for (const skey of [...Object.values(STORAGE_KEYS), 'pf_enc_combat', 'pf_enc_players', 'pf_enc_groups']) {
           try { localStorage.removeItem(skey); } catch (e) { /* best effort */ }
         }
         console.log('Migrated data from localStorage to IndexedDB');
@@ -2130,7 +2129,6 @@ function launchCombat(partyId) {
     round: 0,
     turnIndex: 0,
     combatants: combatants,
-    damageLog: [],
     active: true
   };
   state.combats.push(newCombat);
@@ -2411,8 +2409,14 @@ function beginCombat() {
   combat.round = 1;
   combat.turnIndex = 0;
   combat.combatants.forEach(c => { c.reactionUsed = false; });
+  // Auto-expand the first combatant
+  var first = combat.combatants[0];
+  if (first && !first._expanded) {
+    first._expanded = true;
+    autoExpandedId = first.id;
+  }
   saveCombat();
-  setStatus('Round 1 - ' + combat.combatants[0].name + '\'s turn', 'success');
+  setStatus('Round 1 - ' + first.name + '\'s turn', 'success');
   render();
 }
 
@@ -2776,8 +2780,13 @@ function renderCombatantDetail(c, idx, template) {
 }
 
 function toggleCombatantDetail(idx) {
-  const c = getActiveCombat().combatants[idx];
+  const combat = getActiveCombat();
+  const c = combat.combatants[idx];
+  // Prevent collapsing the active combatant during their turn
+  if (c._expanded && combat.round >= 1 && idx === combat.turnIndex) return;
   c._expanded = !c._expanded;
+  // If manually collapsing a panel that was auto-expanded, clear the tracking
+  if (!c._expanded && autoExpandedId === c.id) autoExpandedId = null;
   const detailEl = document.getElementById('detail-' + idx);
   if (detailEl) {
     detailEl.classList.toggle('expanded', c._expanded);
@@ -3251,6 +3260,13 @@ function nextTurn() {
   const combat = getActiveCombat();
   if (!combat || combat.round < 1) return;
 
+  // Collapse previous auto-expanded panel
+  if (autoExpandedId) {
+    var prev = combat.combatants.find(function(c) { return c.id === autoExpandedId; });
+    if (prev) prev._expanded = false;
+    autoExpandedId = null;
+  }
+
   const startIdx = combat.turnIndex;
   let next = startIdx;
   let wrapped = false;
@@ -3269,7 +3285,14 @@ function nextTurn() {
   combat.turnIndex = next;
   applyTurnStartEffects(next);
 
-  setStatus('Round ' + combat.round + ' - ' + combat.combatants[next].name + '\'s turn', 'success');
+  // Auto-expand the new active combatant
+  var active = combat.combatants[next];
+  if (!active._expanded) {
+    active._expanded = true;
+    autoExpandedId = active.id;
+  }
+
+  setStatus('Round ' + combat.round + ' - ' + active.name + '\'s turn', 'success');
   saveCombat();
   render();
 }
@@ -3277,6 +3300,13 @@ function nextTurn() {
 function prevTurn() {
   const combat = getActiveCombat();
   if (!combat || combat.round < 1) return;
+
+  // Collapse previous auto-expanded panel
+  if (autoExpandedId) {
+    var prevAuto = combat.combatants.find(function(c) { return c.id === autoExpandedId; });
+    if (prevAuto) prevAuto._expanded = false;
+    autoExpandedId = null;
+  }
 
   const startIdx = combat.turnIndex;
   let prev = startIdx;
@@ -3295,7 +3325,14 @@ function prevTurn() {
 
   combat.turnIndex = prev;
 
-  setStatus('Round ' + combat.round + ' - ' + combat.combatants[prev].name + '\'s turn', 'success');
+  // Auto-expand the new active combatant
+  var active = combat.combatants[prev];
+  if (!active._expanded) {
+    active._expanded = true;
+    autoExpandedId = active.id;
+  }
+
+  setStatus('Round ' + combat.round + ' - ' + active.name + '\'s turn', 'success');
   saveCombat();
   render();
 }

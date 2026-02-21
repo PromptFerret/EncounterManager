@@ -54,7 +54,7 @@ The file is ~3300+ lines. Rough section layout:
 | Mid-Combat Editing | `editInit()`, `killCombatant()`, `reviveCombatant()`, `removeCombatant()`, `endCombat()` |
 | Import/Export | `exportData()` (Save Backup), `showImportDialog()` (Load Backup - direct file picker), `exportMonster()` (per-monster), `showImportMonsterDialog()` / `doImportMonster()` (Import Monster modal, multiselect) |
 | Storage Indicator | `updateStorageInfo()` - auto-scales units (B/KB/MB/GB), shows usage/quota |
-| Init | `load().then(() => { render(); updateStorageInfo(); })` |
+| Init | `load().then(() => { switchView(savedPref) or render(); updateStorageInfo(); })` |
 
 *Line numbers are approximate and shift as code is added.*
 
@@ -92,8 +92,9 @@ All forms (template, party, encounter) follow Save/Close/Cancel with dirty track
 
 ### State Management
 ```javascript
-let state = { templates: [], groups: [], encounters: [], parties: [], combats: [] };
+let state = { templates: [], encounters: [], parties: [], combats: [], preferences: { view: 'templates' } };
 let activeCombatId = null; // transient, not persisted - ID of the combat being viewed
+let autoExpandedId = null; // transient - combatant ID auto-expanded on turn start
 ```
 - `state.combats` is an array of combat objects (supports multiple simultaneous combats)
 - `getActiveCombat()` returns the combat matching `activeCombatId`, or null
@@ -103,7 +104,7 @@ let activeCombatId = null; // transient, not persisted - ID of the combat being 
 
 ### Storage (IndexedDB)
 - **Database**: `pf_encounter`, version 1, single object store `state`
-- **Keys** (same `pf_enc_` namespace): `pf_enc_templates`, `pf_enc_groups`, `pf_enc_encounters`, `pf_enc_parties`, `pf_enc_combats`
+- **Keys** (same `pf_enc_` namespace): `pf_enc_templates`, `pf_enc_encounters`, `pf_enc_parties`, `pf_enc_combats`, `pf_enc_preferences`
 - **`load()`** is async - reads from IndexedDB, auto-migrates from localStorage on first run (copies data, then clears localStorage)
 - **`save(key)`** is fire-and-forget - kicks off IndexedDB write without awaiting, callers don't need to change
 - **Fallback**: if IndexedDB is unavailable (`file://` + Safari edge cases), falls back to localStorage silently via `_useLocalStorage` flag
@@ -118,7 +119,7 @@ let activeCombatId = null; // transient, not persisted - ID of the combat being 
 
 **Party** - `{ id, name, players: ["name1", "name2"] }`. Players are strings (names only), managed per-party. No shared roster.
 
-**Combat State** - `{ id, name, encounterId, partyId, round, turnIndex, combatants[], damageLog[], active }`. `round: 0` = initiative setup phase. `round: 1+` = active combat. Multiple combats can exist simultaneously in `state.combats[]`.
+**Combat State** - `{ id, name, encounterId, partyId, round, turnIndex, combatants[], active }`. `round: 0` = initiative setup phase. `round: 1+` = active combat. Multiple combats can exist simultaneously in `state.combats[]`.
 
 **Combatant Instance** - sparse delta pattern. Instances only store overrides from template defaults. Value resolution: `instance.overrides?.[field] ?? template[field]`.
 
@@ -271,7 +272,7 @@ User input flows through `this.value` in onchange handlers (reads from DOM eleme
 - **Phase 4.1** (done): Per-party player lists (removed shared roster), toolbar UX (Save Backup/Load Backup/Import Monster), direct file picker for Load Backup (no modal)
 - **Phase 4.2** (done): Combat reinforcements - replaced browser `prompt()` with proper modal for adding combatants (three modes: ad-hoc, player, or templated monsters with full stat blocks). Searchable monster picker in modal (separate DOM IDs from encounter form picker). Retroactive numbering when adding more of the same template. Replaced custom condition `prompt()` with inline text input. Extracted `createMonsterCombatant()` helper from `launchCombat()`.
 - **Phase 4.3** (done): View persistence - active tab saved to `state.preferences` in IndexedDB, restored on load. Included in backup export/import.
-- **Phase 4.4** (next): Cleanup & active combatant UX - remove dead `groups` field, audit for other artifacts, auto-expand active combatant panel (prevent collapse during turn).
+- **Phase 4.4** (done): Cleanup & active combatant UX - removed dead `groups` field and unused `damageLog` from combat state, IndexedDB/localStorage cleanup for old keys. Auto-expand active combatant panel on turn start (auto-collapse previous), prevent collapse during active turn.
 - **Phase 5** (future): Combat overrides - in-combat monster editing with sparse delta overrides (`deepMerge` + `sparseOverrides`). Single edit, batch edit mode with checkbox selection (same-template only), per-field reset, visual indicators for overridden values. No adding/removing array elements.
 - **Phase 6+** (future): External importers - 5etools, CritterDB, Bestiary Builder (each in own phase). See `PLAN.md` for details.
 
