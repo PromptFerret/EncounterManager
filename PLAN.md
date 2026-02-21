@@ -169,8 +169,8 @@ The existing "+ Add" button in the combat bar and initiative setup currently use
    - Searchable monster picker (reuse the `.search-select` pattern from the encounter form)
    - Quantity input (1-20, default 1)
    - Optional initiative input (pre-rolled from template like combat launch, but editable)
-   - For each monster: roll HP from formula, roll initiative with template's initBonus/initAdvantage, create full type:'monster' combatant instance with templateId link
-   - Numbered names if qty > 1 (same naming logic as `launchCombat`)
+   - For each monster: set currentHp from template.hpMax (not rolled - matches `launchCombat` behavior), roll initiative with template's initBonus/initAdvantage, create full type:'monster' combatant instance with templateId link
+   - Numbered names: scan existing combatants for the highest number already used for that template (e.g., if Goblin 1-3 exist, new goblins start at Goblin 4). Also retroactively number existing unnamed instances if adding more of the same type (e.g., one "Goblin" becomes "Goblin 1" when "Goblin 2" is added)
 
 #### Behavior
 - Modal replaces `prompt()` in both active combat ("+ Add" in combat bar) and initiative setup ("+ Add Combatant")
