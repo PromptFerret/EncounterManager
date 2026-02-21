@@ -834,7 +834,7 @@ let formMode = null;   // null = list, 'template' = editing template, 'encounter
 let formData = null;   // working copy of the item being edited
 let savedFormSnapshot = null; // snapshot of formData at last save, for dirty checking
 let searchQuery = '';
-let activeCombatId = null; // transient - ID of the combat currently being viewed
+let activeCombatId = null; // ID of the combat currently being viewed (persisted in preferences)
 let autoExpandedId = null; // transient - combatant ID that was auto-expanded on turn start
 
 function getActiveCombat() {
@@ -1166,7 +1166,13 @@ async function decompress(base64) {
 // ── Combat Helpers ──
 // ═══════════════════════════════════════════════════════════════
 
-function saveCombat() { save('combats'); }
+function saveCombat() {
+  save('combats');
+  // Persist active combat ID so refreshes resume the same combat
+  state.preferences = state.preferences || {};
+  state.preferences.activeCombatId = activeCombatId;
+  save('preferences');
+}
 
 function getTemplate(c) {
   return c.type === 'monster' ? state.templates.find(t => t.id === c.templateId) : null;
@@ -1196,13 +1202,14 @@ function switchView(view) {
   searchQuery = '';
 
   currentView = view;
-  state.preferences = state.preferences || {};
-  state.preferences.view = view;
-  save('preferences');
   // When navigating to combat via tab, show the combat list (not last-viewed combat)
   if (view === 'combat' && !pendingCombatEncounterId) {
     activeCombatId = null;
   }
+  state.preferences = state.preferences || {};
+  state.preferences.view = view;
+  state.preferences.activeCombatId = activeCombatId;
+  save('preferences');
   ['templates', 'parties', 'encounters', 'combat'].forEach(v => {
     document.getElementById('nav' + v.charAt(0).toUpperCase() + v.slice(1)).classList.toggle('active', view === v);
     document.getElementById('view' + v.charAt(0).toUpperCase() + v.slice(1)).classList.toggle('active', view === v);
@@ -2048,6 +2055,9 @@ function renderCombatList(el) {
 
 function resumeCombat(combatId) {
   activeCombatId = combatId;
+  state.preferences = state.preferences || {};
+  state.preferences.activeCombatId = activeCombatId;
+  save('preferences');
   render();
 }
 
@@ -2461,7 +2471,7 @@ function renderActiveCombat(el) {
   // ── Combat Bar ──
   html += '<div class="combat-bar">';
   if (state.combats.length > 1) {
-    html += '<button class="btn-sm" onclick="activeCombatId=null;render()" title="Back to combat list">&laquo; List</button>';
+    html += '<button class="btn-sm" onclick="activeCombatId=null;saveCombat();render()" title="Back to combat list">&laquo; List</button>';
   }
   html += '<span class="round-badge">Round ' + combat.round + '</span>';
   html += '<button class="btn-sm" onclick="prevTurn()">&laquo; Prev</button>';
@@ -3552,6 +3562,11 @@ function showImportDialog() {
       var restoredView = state.preferences && state.preferences.view;
       if (restoredView && ['templates', 'parties', 'encounters', 'combat'].includes(restoredView)) {
         switchView(restoredView);
+        var restoredCombatId = state.preferences && state.preferences.activeCombatId;
+        if (restoredView === 'combat' && restoredCombatId && state.combats.find(function(c) { return c.id === restoredCombatId; })) {
+          activeCombatId = restoredCombatId;
+          render();
+        }
       } else {
         render();
       }
@@ -3663,6 +3678,12 @@ load().then(() => {
   var savedView = state.preferences && state.preferences.view;
   if (savedView && ['templates', 'parties', 'encounters', 'combat'].includes(savedView)) {
     switchView(savedView);
+    // Restore active combat if saved and still exists
+    var savedCombatId = state.preferences && state.preferences.activeCombatId;
+    if (savedView === 'combat' && savedCombatId && state.combats.find(function(c) { return c.id === savedCombatId; })) {
+      activeCombatId = savedCombatId;
+      render();
+    }
   } else {
     render();
   }
