@@ -55,13 +55,14 @@ All data lives in your browser's IndexedDB - never on a server, never transmitte
 ### Combat
 - **Initiative tracking**: monsters pre-rolled with breakdown shown, players entered manually
 - **HP management**: damage (THP absorbed first), healing, temp HP - all following D&D rules
-- **Attack rolling**: normal/advantage/disadvantage, crit detection, damage rolling with crit doubling
+- **Attack rolling**: click-to-popup roll mode (disadvantage/normal/advantage for attacks, normal/crit for damage), crit detection, damage rolling with crit doubling
 - **Conditions**: 14 standard D&D conditions + custom effects, three duration types (rounds, save-based, indefinite), auto-decrement
 - **Concentration**: tracking with automatic CON save DC warnings on damage
 - **Legendary actions/resistances**: budget tracking, use/restore buttons, auto-recharge on turn
 - **Feature use tracking**: per-feature uses with DM-initiated recharge rolls
 - **Inline dice rolling**: clickable dice notation in feature/trait text
 - **Multi-combat**: run multiple combats simultaneously, switch between them
+- **Combat overrides**: edit monster stats mid-combat without altering the original template - single or batch edit with per-field revert
 - **Roll log**: stacking chronological log per combatant, persisted across refreshes
 
 ### Import/Export

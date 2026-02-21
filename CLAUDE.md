@@ -34,7 +34,7 @@ The file is ~3700+ lines. Rough section layout:
 | Constants & State | `ABILITIES`, `CONDITIONS`, `SKILLS`, `SIZES`, `STORAGE_KEYS`, `state`, `activeCombatId`, `getActiveCombat()`, `load()`/`save()`, `uuid()`, `esc()`, `modStr()` |
 | Dice Engine | `rollDice(notation, opts)`, `renderDiceText()`, `rollInlineDice()` |
 | Compression | CRC32, `compress()`, `decompress()` - SquishText-compatible, embedded for import/export |
-| Combat Helpers | `saveCombat()`, `getTemplate()`, `resolveField()` |
+| Combat Helpers | `saveCombat()`, `getTemplate()`, `getRawTemplate()`, `deepMerge()`, `sparseOverrides()`, `isFieldOverridden()` |
 | View Management | `switchView()`, `handleNew()`, `render()` dispatcher |
 | Monster Templates | List, form, CRUD, passive perception, crits-on field |
 | Encounters | List, form, CRUD, searchable monster picker, delete (clears linked combats) |
@@ -42,16 +42,18 @@ The file is ~3700+ lines. Rough section layout:
 | Combat Entry | `startCombat()`, party select cards, `launchCombat()` |
 | Combat List | `renderCombatList()`, `resumeCombat()` - multi-combat selector |
 | Initiative Setup | `renderInitiativeSetup()`, `beginCombat()` |
-| Active Combat | `renderActiveCombat()`, `renderCombatantDetail()` (with conditions, concentration, legendary sections, collapsible "Tactics & Descriptions" accordion with Copy buttons), `showAddCombatantModal()` / `doAddCombatant()` |
+| Edit Mode (Combat Overrides) | `exitEditMode()`, `toggleEditMode()`, `toggleEditSelect()`, `openEditForm()`, `renderEditOverrideForm()`, `editField()`, `applyEditOverrides()`, `cancelEditOverrides()`, `editSingleCombatant()`, `ovh()` (override highlight wrapper), conflict detection, field revert, per-item save/skill revert (`isSaveItemModified`, `revertSaveItem`, `restoreDeletedSave`, `isSkillItemModified`, `revertSkillItem`, `restoreDeletedSkill`) |
+| Active Combat | `renderActiveCombat()`, `renderCombatantDetail()` (with conditions, concentration, legendary sections, collapsible "Tactics & Descriptions" accordion with Copy buttons, override highlighting), `showAddCombatantModal()` / `doAddCombatant()` |
 | Condition Tracking | `updateConditionFields()`, `toggleCustomCondInput()`, `addCondition()`, `removeCondition()` |
 | Concentration | `setConcentration()`, `dropConcentration()` |
 | HP Tracking | `applyDamage()` (with concentration DC warning), `applyHeal()`, `applyTempHp()` |
 | Feature Use Tracking | `useFeature()`, `restoreFeature()`, `rollRecharge()` |
 | Legendary Actions | `useLegendaryAction()`, `useLegendaryResistance()`, `restoreLegendaryResistance()`, `restoreLegendaryAction()` |
-| Ability Check/Save | `rollAbilityCheck()`, `rollSavingThrow()` |
+| Roll Mode Popup | `showRollPopup()`, `showDmgPopup()`, `fireRollPopup()`, `fireDmgPopup()`, `hideRollPopup()`, `positionPopup()` - click Atk/Chk/Save/Dmg to get Dis/Normal/Adv or Normal/Crit popup |
+| Ability Check/Save | `rollAbilityCheck(cIdx, ability, mode)`, `rollSavingThrow(cIdx, ability, mode)` - mode: undefined, `'advantage'`, `'disadvantage'` |
 | Attack Rolling | `rollAttack()`, `rollDamageForAttack()`, `renderRollLog()` |
 | Turn Management | `applyTurnStartEffects()`, `nextTurn()`, `prevTurn()`, `toggleReaction()` |
-| Mid-Combat Editing | `editInit()`, `killCombatant()`, `reviveCombatant()`, `removeCombatant()`, `endCombat()` |
+| Mid-Combat Editing | `editInit()`, `killCombatant()`, `reviveCombatant()`, `removeCombatant()`, `endCombat()`, `editSingleCombatant()` |
 | Import/Export | `exportData()` (Save Backup), `showImportDialog()` (Load Backup - direct file picker), `exportMonster()` (per-monster), `showImportMonsterDialog()` / `doImportMonster()` (Import Monster modal, multiselect) |
 | Storage Indicator | `updateStorageInfo()` - auto-scales units (B/KB/MB/GB), shows usage/quota |
 | Init | `load().then(() => { switchView(savedPref) or render(); updateStorageInfo(); })` |
@@ -82,7 +84,7 @@ Forms use module-level variables:
 - `savedFormSnapshot` - JSON snapshot taken at form open/save for dirty detection
 - Dirty check: `JSON.stringify(formData) !== JSON.stringify(savedFormSnapshot)`
 
-**Important**: This pattern is used for template/encounter/party forms ONLY. Combat edits are direct mutations on `state.combat.combatants[]` + `saveCombat()`. Do not use `formData` inside combat code.
+**Important**: This pattern is used for template/encounter/party forms ONLY. Combat edits are direct mutations on `state.combat.combatants[]` + `saveCombat()`. Do not use `formData` inside combat code. The combat override edit form uses separate state variables (`editMode`, `editSelected`, `editLockedTemplateId`, `editFormData`, `editFormVisible`, `editRawTemplate`, `editConflicts`) to avoid collision.
 
 ### Form Pattern
 All forms (template, party, encounter) follow Save/Close/Cancel with dirty tracking:
@@ -121,7 +123,7 @@ let autoExpandedId = null; // persisted in state.preferences - combatant ID auto
 
 **Combat State** - `{ id, name, encounterId, partyId, round, turnIndex, combatants[], active }`. `round: 0` = initiative setup phase. `round: 1+` = active combat. Multiple combats can exist simultaneously in `state.combats[]`.
 
-**Combatant Instance** - sparse delta pattern. Instances only store overrides from template defaults. Value resolution: `instance.overrides?.[field] ?? template[field]`.
+**Combatant Instance** - sparse delta pattern. Instances only store overrides from template defaults. Value resolution: `getTemplate(c)` returns `deepMerge(rawTemplate, c.overrides)` if overrides exist, otherwise raw template. All combat code uses `getTemplate(c)` which automatically returns the merged result.
 
 Monster: `{ id, templateId, name, type:'monster', init, initRollText, currentHp, rollLog[] }`
 Player: `{ id, name, type:'player', init, ac }` - init entered manually, AC editable in detail panel.
@@ -212,9 +214,12 @@ Fields added on mutation only: `tempHp`, `overrides`, `reactionUsed`, `notes`, `
 - LA budget auto-recharges at start of monster's turn
 - Restore LA button in section header, Restore LR button next to Use LR
 
+### Roll Mode Popup
+All d20 rolls (attacks, ability checks, saving throws) and damage rolls use a popup menu instead of inline buttons. Clicking [Atk], [Chk], or [Save] shows a popup with Disadvantage / Normal / Advantage. Clicking [Dmg] shows a popup with Normal / Crit. The popup is a single shared `#rollModePopup` div repositioned on each click. `showRollPopup()` renders Dis/Normal/Adv buttons, `showDmgPopup()` renders Normal/Crit buttons. Click outside to dismiss. Callback state stored in `rollPopupState` (transient, not persisted).
+
 ### Ability Check/Save Rolling
-- `rollAbilityCheck(cIdx, ability)` - rolls 1d20 + ability modifier, appends to rollLog
-- `rollSavingThrow(cIdx, ability)` - rolls 1d20 + save bonus (proficient if in template.savingThrows) or ability modifier, appends to rollLog
+- `rollAbilityCheck(cIdx, ability, mode)` - rolls 1d20 + ability modifier, supports advantage/disadvantage via `mode` parameter, appends to rollLog
+- `rollSavingThrow(cIdx, ability, mode)` - rolls 1d20 + save bonus (proficient if in template.savingThrows) or ability modifier, supports advantage/disadvantage via `mode` parameter, appends to rollLog
 
 ### Condition Tracking
 - Conditions work on ALL combatant types (monsters, players, ad-hoc)
@@ -274,7 +279,7 @@ User input flows through `this.value` in onchange handlers (reads from DOM eleme
 - **Phase 4.3** (done): View persistence - active tab saved to `state.preferences` in IndexedDB, restored on load. Included in backup export/import.
 - **Phase 4.4** (done): Cleanup & active combatant UX - removed dead `groups` field and unused `damageLog` from combat state, IndexedDB/localStorage cleanup for old keys. Auto-expand active combatant panel on turn start (auto-collapse previous), prevent collapse during active turn.
 - **Phase 4.5** (done): Monster descriptions and combat polish. Added `playerDescription` and `dmDescription` fields on templates. Tactics, player description, and DM description shown in a collapsible "Tactics & Descriptions" accordion at the bottom of the combat detail panel (collapsed by default), each as a card box with a Copy button. Chk/Save ability buttons styled as `btn-accent`. Status bar reserves fixed height (no layout bounce). Combat bar compact sizing with no top padding on combat view. `activeCombatId` and `autoExpandedId` persisted in preferences (survive refresh). Prev button disabled at round 1 first combatant.
-- **Phase 5** (future): Combat overrides - in-combat monster editing with sparse delta overrides (`deepMerge` + `sparseOverrides`). Single edit, batch edit mode with checkbox selection (same-template only), per-field reset, visual indicators for overridden values. No adding/removing array elements.
+- **Phase 5** (done): Combat overrides - in-combat monster editing with sparse delta overrides (`deepMerge` + `sparseOverrides`). Single edit, batch edit mode with checkbox selection (same-template only), per-field revert with per-item revert for saves/skills (match by name, deleted items shown struck-through with restore button), visual indicators for overridden values (badge on row, highlight on all detail panel fields). Saves/skills can be added/removed (name-referenced); attacks/features/legendary actions cannot (index-referenced). Edit mode disables combat controls (Prev/Next/+Add/End Combat). Apply/Cancel exit edit mode entirely. Roll mode popup: all d20 rolls (Atk/Chk/Save) and damage rolls (Dmg) now use a click-to-popup menu (Dis/Normal/Adv for d20, Normal/Crit for damage) instead of inline buttons.
 - **Phase 6+** (future): External importers - 5etools, CritterDB, Bestiary Builder (each in own phase). See `PLAN.md` for details.
 
 ## Development Notes
@@ -296,5 +301,9 @@ User input flows through `this.value` in onchange handlers (reads from DOM eleme
 - **Save Backup / Load Backup**: Full data backup/restore. Load Backup uses direct file picker (no modal). Save Backup downloads `.squishtext` file.
 - **Import Monster / Export Monster**: Per-monster `.squishtext` files. Export button on each monster card. Import Monster button in toolbar (visible on Monsters tab only). Import modal supports multiselect - processes multiple `.squishtext` files at once, dedupes by ID across files.
 - **External importers** (Phase 5+): Each importer is a pure function `importXxx(json) → template[]`. Format detection in `doImportMonster()`: try SquishText decompress → try JSON.parse → detect format (our native has `version`+`templates`, 5etools has `monster` array or top-level `str`/`ac`-as-array). External imports get new `uuid()` IDs and dedup by name (not ID, since external formats don't use our IDs). See `PLAN.md` Phase 5 for field mapping, tag stripping, and action parsing. See `5ETOOLS_CREATURE_SCHEMA.md` (in the tools repo at `references/5ETOOLS_CREATURE_SCHEMA.md`) for the full schema reference (derived from official 5etools-utils JSON schema v1.21.60).
+- **Combat override system**: `deepMerge(base, overrides)` recursively merges overrides onto templates. Same-length arrays use index-based merge (attacks/features/LAs - index-referenced, cannot add/remove). Different-length arrays use full replacement (saves/skills - name-referenced, can add/remove). `sparseOverrides(base, edited)` produces minimal delta. `getTemplate(c)` returns merged result; `getRawTemplate(c)` returns raw template for edit form diffing. `isFieldOverridden(c, fieldPath)` navigates overrides by dot-path for visual highlighting. Edit mode uses 7 transient state variables (`editMode`, `editSelected`, `editLockedTemplateId`, `editFormData`, `editFormVisible`, `editRawTemplate`, `editConflicts`) - all cleared on exit or view switch.
+- **Edit mode controls**: When `editMode` is active, combat controls (Prev/Next/+Add/End Combat/Back to List) are disabled. Only Edit Mode toggle and Edit Selected remain active. Checkboxes appear on monster rows; first selection locks `editLockedTemplateId`, non-matching templates are dimmed/disabled. Edit form replaces combatant rows when `editFormVisible` is true.
+- **Per-item save/skill revert**: Saves match by ability name, skills match by skill name. `isSaveItemModified(idx)` / `isSkillItemModified(idx)` return true for modified or added items. Revert restores template values for modified items, splices out added items. Deleted items (in template but not in edit form) shown struck-through with restore button. Bonus input and dropdown changes trigger re-render for immediate visual feedback.
+- **Roll mode popup**: Single `#rollModePopup` div shared by all roll buttons. `showRollPopup(evt, fnName, cIdx, param)` renders Dis/Normal/Adv for d20 rolls, `showDmgPopup(evt, cIdx, atkIdx)` renders Normal/Crit for damage. `fireRollPopup(mode)` calls the stored function via `window[fnName]()`. `fireDmgPopup(crit)` calls `rollDamageForAttack()`. Click outside dismisses via `document.addEventListener('click', hideRollPopup)`. Popup content rendered dynamically (innerHTML) on each open.
 - No backwards compatibility concerns yet - tool is pre-release
 - Context: heroic/homebrew D&D - CR100 monsters, level 60 players, non-standard rules are expected

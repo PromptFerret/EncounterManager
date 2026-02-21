@@ -263,8 +263,9 @@
   }
   .dyn-row textarea { resize: vertical; min-height: 1.8rem; font-family: var(--mono); font-size: 0.75rem; }
   .btn-remove {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.72rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.78rem;
+    line-height: 1.16;
     color: var(--error);
     border: 1px solid var(--error);
     background: transparent;
@@ -746,6 +747,47 @@
     white-space: nowrap;
   }
 
+  /* ── Edit Mode (Combat Overrides) ── */
+  .edit-checkbox { accent-color: var(--accent); width: auto; cursor: pointer; }
+  .edit-checkbox:disabled { opacity: 0.3; cursor: not-allowed; }
+  .override-badge { font-size: 0.7rem; color: var(--accent); margin-left: 0.25rem; vertical-align: middle; }
+
+  /* Roll mode popup */
+  #rollModePopup {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    gap: 0.3rem;
+    padding: 0.4rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  .combatant-name.has-overrides { color: #c4a8ff; }
+  .override-highlight {
+    border-left: 3px solid var(--accent);
+    padding-left: 0.4rem;
+    background: rgba(124, 92, 191, 0.15);
+    border-radius: 2px;
+    color: #c4a8ff;
+  }
+  .edit-field-modified { border-color: var(--accent) !important; }
+  .edit-field-conflict { opacity: 0.5; }
+  .btn-revert {
+    font-size: 0.78rem;
+    line-height: 1.16;
+    padding: 0.35rem 0.5rem;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    background: transparent;
+    border-radius: var(--radius);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .btn-revert:hover { background: var(--accent); color: white; }
+
   /* ── Responsive ── */
   @supports (height: 100dvh) { body { height: 100dvh; } }
   @media (max-width: 640px) {
@@ -782,6 +824,8 @@
 </div>
 
 <div id="statusEl"></div>
+
+<div id="rollModePopup" onclick="event.stopPropagation()"></div>
 
 <div class="main">
   <div id="viewTemplates" class="view active"></div>
@@ -837,6 +881,15 @@ let savedFormSnapshot = null; // snapshot of formData at last save, for dirty ch
 let searchQuery = '';
 let activeCombatId = null; // ID of the combat currently being viewed (persisted in preferences)
 let autoExpandedId = null; // combatant ID that was auto-expanded on turn start (persisted in preferences)
+
+// ── Edit Mode (Combat Overrides) ──
+let editMode = false;              // edit mode toggle active
+let editSelected = [];             // array of combatant IDs selected for editing
+let editLockedTemplateId = null;   // template ID locked on first checkbox selection
+let editFormData = null;           // working copy of template being edited
+let editFormVisible = false;       // is the edit form showing
+let editRawTemplate = null;        // raw template for diffing/revert
+let editConflicts = new Set();     // set of field paths where selected combatants disagree
 
 function getActiveCombat() {
   if (!activeCombatId) return null;
@@ -1177,16 +1230,113 @@ function saveCombat() {
 }
 
 function getTemplate(c) {
+  if (c.type !== 'monster') return null;
+  var raw = state.templates.find(t => t.id === c.templateId);
+  if (!raw) return null;
+  return (c.overrides && Object.keys(c.overrides).length > 0) ? deepMerge(raw, c.overrides) : raw;
+}
+
+function getRawTemplate(c) {
   return c.type === 'monster' ? state.templates.find(t => t.id === c.templateId) : null;
 }
 
-function resolveField(c, field) {
-  if (c.overrides && c.overrides[field] !== undefined) return c.overrides[field];
-  if (c.type === 'monster') {
-    const t = getTemplate(c);
-    return t ? t[field] : undefined;
+function deepMerge(base, overrides) {
+  if (!overrides || typeof overrides !== 'object') return deepClone(base);
+  if (!base || typeof base !== 'object') return deepClone(overrides);
+  var result = {};
+  for (var key in base) {
+    if (!base.hasOwnProperty(key)) continue;
+    if (!overrides.hasOwnProperty(key)) { result[key] = deepClone(base[key]); continue; }
+    var bv = base[key], ov = overrides[key];
+    if (Array.isArray(bv) && Array.isArray(ov)) {
+      if (ov.length !== bv.length) {
+        // Different length = full replacement (saves/skills add/remove)
+        result[key] = deepClone(ov);
+      } else {
+        // Same length = index-based merge (attacks/features/LAs)
+        result[key] = [];
+        for (var i = 0; i < bv.length; i++) {
+          if (ov[i] === null || ov[i] === undefined) {
+            result[key][i] = deepClone(bv[i]);
+          } else if (typeof ov[i] === 'object' && !Array.isArray(ov[i]) && typeof bv[i] === 'object' && !Array.isArray(bv[i])) {
+            result[key][i] = deepMerge(bv[i], ov[i]);
+          } else {
+            result[key][i] = deepClone(ov[i]);
+          }
+        }
+      }
+    } else if (typeof bv === 'object' && !Array.isArray(bv) && bv !== null && typeof ov === 'object' && !Array.isArray(ov) && ov !== null) {
+      result[key] = deepMerge(bv, ov);
+    } else {
+      result[key] = deepClone(ov);
+    }
   }
-  return undefined;
+  for (var key in overrides) {
+    if (overrides.hasOwnProperty(key) && !base.hasOwnProperty(key)) {
+      result[key] = deepClone(overrides[key]);
+    }
+  }
+  return result;
+}
+
+function sparseOverrides(base, edited) {
+  if (!base || !edited) return {};
+  var result = {};
+  var hasAny = false;
+  for (var key in edited) {
+    if (!edited.hasOwnProperty(key)) continue;
+    var bv = base[key], ev = edited[key];
+    if (Array.isArray(bv) && Array.isArray(ev)) {
+      if (bv.length !== ev.length) {
+        // Different length = full replacement
+        result[key] = deepClone(ev);
+        hasAny = true;
+      } else {
+        // Same length = sparse by index
+        var sparse = [];
+        var changed = false;
+        for (var i = 0; i < bv.length; i++) {
+          if (JSON.stringify(bv[i]) !== JSON.stringify(ev[i])) {
+            if (typeof bv[i] === 'object' && !Array.isArray(bv[i]) && bv[i] !== null && typeof ev[i] === 'object' && !Array.isArray(ev[i]) && ev[i] !== null) {
+              sparse[i] = sparseOverrides(bv[i], ev[i]);
+            } else {
+              sparse[i] = deepClone(ev[i]);
+            }
+            changed = true;
+          } else {
+            sparse[i] = null;
+          }
+        }
+        if (changed) { result[key] = sparse; hasAny = true; }
+      }
+    } else if (typeof bv === 'object' && !Array.isArray(bv) && bv !== null && typeof ev === 'object' && !Array.isArray(ev) && ev !== null) {
+      var sub = sparseOverrides(bv, ev);
+      if (Object.keys(sub).length > 0) { result[key] = sub; hasAny = true; }
+    } else if (JSON.stringify(bv) !== JSON.stringify(ev)) {
+      result[key] = deepClone(ev);
+      hasAny = true;
+    }
+  }
+  return hasAny ? result : {};
+}
+
+function isFieldOverridden(c, fieldPath) {
+  if (!c.overrides) return false;
+  var parts = fieldPath.split('.');
+  var obj = c.overrides;
+  for (var i = 0; i < parts.length; i++) {
+    if (obj === null || obj === undefined || typeof obj !== 'object') return false;
+    var key = parts[i];
+    if (Array.isArray(obj)) {
+      var idx = parseInt(key);
+      if (isNaN(idx) || obj[idx] === null || obj[idx] === undefined) return false;
+      obj = obj[idx];
+    } else {
+      if (!obj.hasOwnProperty(key)) return false;
+      obj = obj[key];
+    }
+  }
+  return true;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1202,6 +1352,14 @@ function switchView(view) {
   formData = null;
   savedFormSnapshot = null;
   searchQuery = '';
+  // Clear edit mode state
+  editMode = false;
+  editSelected = [];
+  editLockedTemplateId = null;
+  editFormData = null;
+  editFormVisible = false;
+  editRawTemplate = null;
+  editConflicts.clear();
 
   currentView = view;
   state.preferences = state.preferences || {};
@@ -2459,6 +2617,497 @@ function beginCombat() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ── Edit Mode (Combat Overrides) ──
+// ═══════════════════════════════════════════════════════════════
+
+function exitEditMode() {
+  editMode = false;
+  editSelected = [];
+  editLockedTemplateId = null;
+  editFormData = null;
+  editFormVisible = false;
+  editRawTemplate = null;
+  editConflicts.clear();
+  render();
+}
+
+function toggleEditMode() {
+  if (editMode) {
+    exitEditMode();
+  } else {
+    editMode = true;
+    editSelected = [];
+    editLockedTemplateId = null;
+    editFormData = null;
+    editFormVisible = false;
+    editRawTemplate = null;
+    editConflicts.clear();
+    render();
+  }
+}
+
+function toggleEditSelect(combatantId, templateId) {
+  var idx = editSelected.indexOf(combatantId);
+  if (idx >= 0) {
+    editSelected.splice(idx, 1);
+    if (editSelected.length === 0) editLockedTemplateId = null;
+  } else {
+    if (editLockedTemplateId === null) editLockedTemplateId = templateId;
+    editSelected.push(combatantId);
+  }
+  render();
+}
+
+function openEditForm() {
+  var combat = getActiveCombat();
+  if (!combat || editSelected.length === 0) return;
+  var selected = combat.combatants.filter(function(c) { return editSelected.indexOf(c.id) >= 0; });
+  if (selected.length === 0) return;
+
+  // Get raw template for diffing
+  editRawTemplate = getRawTemplate(selected[0]);
+  if (!editRawTemplate) return;
+
+  // Build editFormData from the first selected combatant's effective values
+  var firstEffective = getTemplate(selected[0]);
+  editFormData = deepClone(firstEffective);
+
+  // Detect conflicts: fields where selected combatants have different effective values
+  editConflicts.clear();
+  if (selected.length > 1) {
+    var paths = flattenPaths(firstEffective, '');
+    paths.forEach(function(path) {
+      var baseVal = getNestedValue(firstEffective, path);
+      for (var i = 1; i < selected.length; i++) {
+        var otherEffective = getTemplate(selected[i]);
+        var otherVal = getNestedValue(otherEffective, path);
+        if (JSON.stringify(baseVal) !== JSON.stringify(otherVal)) {
+          editConflicts.add(path);
+          break;
+        }
+      }
+    });
+  }
+
+  editFormVisible = true;
+  render();
+}
+
+function getNestedValue(obj, path) {
+  var parts = path.split('.');
+  var cur = obj;
+  for (var i = 0; i < parts.length; i++) {
+    if (cur === null || cur === undefined) return undefined;
+    var key = parts[i];
+    if (Array.isArray(cur)) {
+      cur = cur[parseInt(key)];
+    } else {
+      cur = cur[key];
+    }
+  }
+  return cur;
+}
+
+function flattenPaths(obj, prefix) {
+  var result = [];
+  if (obj === null || obj === undefined || typeof obj !== 'object') {
+    if (prefix) result.push(prefix);
+    return result;
+  }
+  if (Array.isArray(obj)) {
+    obj.forEach(function(item, i) {
+      var p = prefix ? prefix + '.' + i : '' + i;
+      result = result.concat(flattenPaths(item, p));
+    });
+  } else {
+    Object.keys(obj).forEach(function(key) {
+      var p = prefix ? prefix + '.' + key : key;
+      result = result.concat(flattenPaths(obj[key], p));
+    });
+  }
+  return result;
+}
+
+function isEditFieldModified(fieldPath) {
+  var raw = getNestedValue(editRawTemplate, fieldPath);
+  var cur = getNestedValue(editFormData, fieldPath);
+  return JSON.stringify(raw) !== JSON.stringify(cur);
+}
+
+function revertEditField(fieldPath) {
+  var parts = fieldPath.split('.');
+  var rawVal = getNestedValue(editRawTemplate, fieldPath);
+  var obj = editFormData;
+  for (var i = 0; i < parts.length - 1; i++) {
+    var key = parts[i];
+    if (Array.isArray(obj)) obj = obj[parseInt(key)];
+    else obj = obj[key];
+  }
+  var lastKey = parts[parts.length - 1];
+  if (Array.isArray(obj)) obj[parseInt(lastKey)] = deepClone(rawVal);
+  else obj[lastKey] = deepClone(rawVal);
+  renderEditOverrideForm();
+}
+
+// Per-item revert for saves (matched by ability name)
+function isSaveItemModified(idx) {
+  var save = editFormData.savingThrows[idx];
+  if (!save) return false;
+  var ts = editRawTemplate.savingThrows.find(function(s) { return s.ability === save.ability; });
+  if (!ts) return true; // added item — not in template
+  return ts.bonus !== save.bonus;
+}
+function revertSaveItem(idx) {
+  var save = editFormData.savingThrows[idx];
+  if (!save) return;
+  var ts = editRawTemplate.savingThrows.find(function(s) { return s.ability === save.ability; });
+  if (ts) editFormData.savingThrows[idx] = deepClone(ts);
+  else editFormData.savingThrows.splice(idx, 1); // added item — remove it
+  renderEditOverrideForm();
+}
+function restoreDeletedSave(ability) {
+  var ts = editRawTemplate.savingThrows.find(function(s) { return s.ability === ability; });
+  if (ts) editFormData.savingThrows.push(deepClone(ts));
+  renderEditOverrideForm();
+}
+
+// Per-item revert for skills (matched by skill name)
+function isSkillItemModified(idx) {
+  var skill = editFormData.skills[idx];
+  if (!skill) return false;
+  var ts = editRawTemplate.skills.find(function(s) { return s.name === skill.name; });
+  if (!ts) return true; // added item — not in template
+  return ts.bonus !== skill.bonus;
+}
+function revertSkillItem(idx) {
+  var skill = editFormData.skills[idx];
+  if (!skill) return;
+  var ts = editRawTemplate.skills.find(function(s) { return s.name === skill.name; });
+  if (ts) editFormData.skills[idx] = deepClone(ts);
+  else editFormData.skills.splice(idx, 1); // added item — remove it
+  renderEditOverrideForm();
+}
+function restoreDeletedSkill(name) {
+  var ts = editRawTemplate.skills.find(function(s) { return s.name === name; });
+  if (ts) editFormData.skills.push(deepClone(ts));
+  renderEditOverrideForm();
+}
+
+function editFieldAttr(fieldPath) {
+  var cls = '';
+  if (editConflicts.has(fieldPath)) cls = ' class="edit-field-conflict" disabled title="Varies across selected combatants"';
+  else if (isEditFieldModified(fieldPath)) cls = ' class="edit-field-modified"';
+  return cls;
+}
+
+function editRevertBtn(fieldPath) {
+  if (editConflicts.has(fieldPath)) return '';
+  if (!isEditFieldModified(fieldPath)) return '';
+  return ' <button class="btn-revert" onclick="revertEditField(\'' + fieldPath + '\')" title="Revert to template">↩</button>';
+}
+
+// Override highlight wrapper: wraps content in highlight span if field is overridden
+function ovh(c, fieldPath, content) {
+  if (isFieldOverridden(c, fieldPath)) return '<span class="override-highlight">' + content + '</span>';
+  return content;
+}
+
+function applyEditOverrides() {
+  var combat = getActiveCombat();
+  if (!combat) { exitEditMode(); return; }
+  var overrides = sparseOverrides(editRawTemplate, editFormData);
+  var count = 0;
+  editSelected.forEach(function(cId) {
+    var c = combat.combatants.find(function(cb) { return cb.id === cId; });
+    if (!c) return;
+    if (editConflicts.size > 0 && c.overrides) {
+      // Preserve existing overrides for conflicting fields
+      var preserved = {};
+      editConflicts.forEach(function(path) {
+        var val = getNestedValue(c.overrides, path);
+        if (val !== undefined) {
+          setNestedValue(preserved, path, deepClone(val));
+        }
+      });
+      c.overrides = Object.keys(overrides).length > 0 ? deepClone(overrides) : {};
+      // Merge preserved conflict values back
+      if (Object.keys(preserved).length > 0) {
+        c.overrides = deepMerge(c.overrides, preserved);
+      }
+    } else {
+      c.overrides = Object.keys(overrides).length > 0 ? deepClone(overrides) : {};
+    }
+    count++;
+  });
+  saveCombat();
+  setStatus('Applied overrides to ' + count + ' combatant' + (count !== 1 ? 's' : ''), 'success');
+  exitEditMode();
+}
+
+function setNestedValue(obj, path, val) {
+  var parts = path.split('.');
+  var cur = obj;
+  for (var i = 0; i < parts.length - 1; i++) {
+    var key = parts[i];
+    if (cur[key] === undefined) cur[key] = {};
+    cur = cur[key];
+  }
+  cur[parts[parts.length - 1]] = val;
+}
+
+function cancelEditOverrides() {
+  setStatus('', '');
+  exitEditMode();
+}
+
+function editSingleCombatant(idx) {
+  var combat = getActiveCombat();
+  if (!combat) return;
+  var c = combat.combatants[idx];
+  if (!c || c.type !== 'monster') return;
+  editMode = true;
+  editSelected = [c.id];
+  editLockedTemplateId = c.templateId;
+  openEditForm();
+}
+
+function renderEditOverrideForm() {
+  var el = document.getElementById('editOverrideContainer');
+  if (!el || !editFormData || !editRawTemplate) return;
+  var d = editFormData;
+  var html = '';
+
+  html += '<div class="form-section"><div class="form-section-title">Editing ' + editSelected.length + ' combatant' + (editSelected.length !== 1 ? 's' : '') + ' — ' + esc(editRawTemplate.name) + '</div></div>';
+
+  // ── Basic Info ──
+  html += '<div class="form-section"><div class="form-section-title">Basic Info</div>';
+  html += '<div class="form-grid cols-4">';
+  html += editField('Name', 'text', d.name, 'editFormData.name=this.value', 'name');
+  html += editField('Size', 'text', d.size, 'editFormData.size=this.value', 'size');
+  html += editField('Type', 'text', d.type, 'editFormData.type=this.value', 'type');
+  html += editField('Alignment', 'text', d.alignment, 'editFormData.alignment=this.value', 'alignment');
+  html += '</div>';
+  html += '<div class="form-grid cols-4" style="margin-top:0.5rem">';
+  html += editField('AC', 'number', d.ac, 'editFormData.ac=+this.value', 'ac');
+  html += editField('AC Note', 'text', d.acNote, 'editFormData.acNote=this.value', 'acNote');
+  html += editField('HP Max', 'number', d.hpMax, 'editFormData.hpMax=+this.value', 'hpMax');
+  html += editField('HP Formula', 'text', d.hpFormula, 'editFormData.hpFormula=this.value', 'hpFormula');
+  html += '</div>';
+  html += '<div class="form-grid cols-4" style="margin-top:0.5rem">';
+  html += editField('Speed', 'text', d.speed, 'editFormData.speed=this.value', 'speed');
+  html += editField('CR', 'text', d.cr, 'editFormData.cr=this.value', 'cr');
+  html += editField('Init Bonus', 'number', d.initBonus, 'editFormData.initBonus=+this.value', 'initBonus');
+  html += '<div class="form-field"><div style="display:flex;gap:0.3rem;align-items:center"><label class="checkbox-label"><input type="checkbox" ' + (d.initAdvantage ? 'checked' : '') + ' onchange="editFormData.initAdvantage=this.checked"' + editFieldAttr('initAdvantage') + '> Init Advantage</label>' + editRevertBtn('initAdvantage') + '</div></div>';
+  html += '</div></div>';
+
+  // ── Ability Scores ──
+  html += '<div class="form-section"><div class="form-section-title">Ability Scores</div>';
+  html += '<div class="form-grid cols-6">';
+  ABILITIES.forEach(function(ab) {
+    var score = d.abilities[ab];
+    var fp = 'abilities.' + ab;
+    html += '<div class="form-field"><label>' + ab.toUpperCase() + ' (' + modStr(score) + ')</label>';
+    html += '<div style="display:flex;gap:0.3rem;align-items:center">';
+    html += '<input type="number" value="' + score + '" onchange="editFormData.abilities.' + ab + '=+this.value" style="flex:1"' + editFieldAttr(fp) + '>';
+    html += editRevertBtn(fp);
+    html += '</div></div>';
+  });
+  html += '</div></div>';
+
+  // ── Saving Throws (add/remove allowed, per-item revert) ──
+  html += '<div class="form-section"><div class="form-section-title">Saving Throws</div>';
+  d.savingThrows.forEach(function(st, i) {
+    var itemMod = isSaveItemModified(i);
+    html += '<div class="dyn-row">';
+    html += '<select onchange="editFormData.savingThrows[' + i + '].ability=this.value;renderEditOverrideForm()" style="width:120px">';
+    ABILITIES.forEach(function(ab) {
+      html += '<option value="' + ab + '"' + (st.ability === ab ? ' selected' : '') + '>' + ABILITY_NAMES[ab] + '</option>';
+    });
+    html += '</select>';
+    html += '<input type="number" value="' + st.bonus + '" onchange="editFormData.savingThrows[' + i + '].bonus=+this.value;renderEditOverrideForm()" style="width:60px" placeholder="+0"' + (itemMod ? ' class="edit-field-modified"' : '') + '>';
+    if (itemMod) html += '<button class="btn-revert" onclick="revertSaveItem(' + i + ')" title="Revert to template">↩</button>';
+    html += '<button class="btn-remove" onclick="editFormData.savingThrows.splice(' + i + ',1);renderEditOverrideForm()">×</button>';
+    html += '</div>';
+  });
+  // Show deleted saves (in template but not in editFormData) with restore buttons
+  var deletedSaves = editRawTemplate.savingThrows.filter(function(ts) {
+    return !d.savingThrows.some(function(s) { return s.ability === ts.ability; });
+  });
+  deletedSaves.forEach(function(ds) {
+    html += '<div class="dyn-row"><span style="text-decoration:line-through;opacity:0.5">' + ABILITY_NAMES[ds.ability] + ' +' + ds.bonus + '</span>';
+    html += '<button class="btn-revert" onclick="restoreDeletedSave(\'' + ds.ability + '\')" title="Restore from template">↩</button></div>';
+  });
+  html += '<button class="btn-add-row" onclick="editFormData.savingThrows.push({ability:\'str\',bonus:0});renderEditOverrideForm()">+ Add Save</button>';
+  html += '</div>';
+
+  // ── Skills (add/remove allowed, per-item revert) ──
+  html += '<div class="form-section"><div class="form-section-title">Skills</div>';
+  d.skills.forEach(function(sk, i) {
+    var itemMod = isSkillItemModified(i);
+    html += '<div class="dyn-row">';
+    html += '<select onchange="editFormData.skills[' + i + '].name=this.value;renderEditOverrideForm()" style="width:150px">';
+    SKILLS.forEach(function(s) {
+      html += '<option value="' + s + '"' + (sk.name === s ? ' selected' : '') + '>' + s + '</option>';
+    });
+    html += '</select>';
+    html += '<input type="number" value="' + sk.bonus + '" onchange="editFormData.skills[' + i + '].bonus=+this.value;renderEditOverrideForm()" style="width:60px" placeholder="+0"' + (itemMod ? ' class="edit-field-modified"' : '') + '>';
+    if (itemMod) html += '<button class="btn-revert" onclick="revertSkillItem(' + i + ')" title="Revert to template">↩</button>';
+    html += '<button class="btn-remove" onclick="editFormData.skills.splice(' + i + ',1);renderEditOverrideForm()">×</button>';
+    html += '</div>';
+  });
+  // Show deleted skills (in template but not in editFormData) with restore buttons
+  var deletedSkills = editRawTemplate.skills.filter(function(ts) {
+    return !d.skills.some(function(s) { return s.name === ts.name; });
+  });
+  deletedSkills.forEach(function(ds) {
+    html += '<div class="dyn-row"><span style="text-decoration:line-through;opacity:0.5">' + esc(ds.name) + ' +' + ds.bonus + '</span>';
+    html += '<button class="btn-revert" onclick="restoreDeletedSkill(\'' + esc(ds.name).replace(/'/g, "\\'") + '\')" title="Restore from template">↩</button></div>';
+  });
+  html += '<button class="btn-add-row" onclick="editFormData.skills.push({name:\'Perception\',bonus:0});renderEditOverrideForm()">+ Add Skill</button>';
+  html += '</div>';
+
+  // ── Defenses ──
+  html += '<div class="form-section"><div class="form-section-title">Defenses & Senses</div>';
+  html += '<div class="form-grid cols-2">';
+  html += editField('Damage Resistances', 'text', d.damageResistances, 'editFormData.damageResistances=this.value', 'damageResistances');
+  html += editField('Damage Immunities', 'text', d.damageImmunities, 'editFormData.damageImmunities=this.value', 'damageImmunities');
+  html += editField('Damage Vulnerabilities', 'text', d.damageVulnerabilities, 'editFormData.damageVulnerabilities=this.value', 'damageVulnerabilities');
+  html += editField('Condition Immunities', 'text', d.conditionImmunities, 'editFormData.conditionImmunities=this.value', 'conditionImmunities');
+  html += editField('Senses', 'text', d.senses, 'editFormData.senses=this.value', 'senses');
+  html += editField('Languages', 'text', d.languages, 'editFormData.languages=this.value', 'languages');
+  html += '</div>';
+  html += '<div class="form-grid cols-2" style="margin-top:0.5rem">';
+  html += editField('Passive Perception', 'number', d.passivePerception != null ? d.passivePerception : '', 'editFormData.passivePerception=this.value===\'\'?null:+this.value', 'passivePerception');
+  html += '<div class="form-field"></div>';
+  html += '</div></div>';
+
+  // ── Attacks (no add/remove - index-referenced) ──
+  html += '<div class="form-section"><div class="form-section-title">Attacks</div>';
+  html += '<div class="form-grid cols-2">';
+  html += editField('Multiattack', 'text', d.multiattack, 'editFormData.multiattack=this.value', 'multiattack');
+  html += editField('Crits On', 'number', d.critRange || 20, 'editFormData.critRange=+this.value||20', 'critRange');
+  html += '</div>';
+  html += '<div style="margin-top:0.5rem">';
+  d.attacks.forEach(function(a, i) {
+    var afp = 'attacks.' + i;
+    html += '<div class="card" style="padding:0.6rem 0.75rem;margin-bottom:0.4rem">';
+    html += '<div class="dyn-row" style="margin-bottom:0.3rem">';
+    html += '<input type="text" value="' + esc(a.name) + '" onchange="editFormData.attacks[' + i + '].name=this.value" placeholder="Name" style="flex:2"' + editFieldAttr(afp + '.name') + '>';
+    html += editRevertBtn(afp + '.name');
+    html += '<input type="number" value="' + a.bonus + '" onchange="editFormData.attacks[' + i + '].bonus=+this.value" placeholder="+4" style="width:55px"' + editFieldAttr(afp + '.bonus') + '>';
+    html += editRevertBtn(afp + '.bonus');
+    html += '<input type="text" value="' + esc(a.note || '') + '" onchange="editFormData.attacks[' + i + '].note=this.value" placeholder="note" style="flex:1"' + editFieldAttr(afp + '.note') + '>';
+    html += editRevertBtn(afp + '.note');
+    html += '</div>';
+    // Damage rows (no add/remove)
+    if (a.damages && a.damages.length > 0) {
+      html += '<div style="padding-left:0.75rem;border-left:2px solid var(--border)">';
+      a.damages.forEach(function(dm, j) {
+        var dfp = afp + '.damages.' + j;
+        html += '<div class="dyn-row">';
+        html += '<input type="text" value="' + esc(dm.dice) + '" onchange="editFormData.attacks[' + i + '].damages[' + j + '].dice=this.value" placeholder="1d8+2" style="width:80px"' + editFieldAttr(dfp + '.dice') + '>';
+        html += editRevertBtn(dfp + '.dice');
+        html += '<input type="text" value="' + esc(dm.type) + '" onchange="editFormData.attacks[' + i + '].damages[' + j + '].type=this.value" placeholder="slashing" style="width:80px"' + editFieldAttr(dfp + '.type') + '>';
+        html += editRevertBtn(dfp + '.type');
+        html += '<input type="text" value="' + esc(dm.note || '') + '" onchange="editFormData.attacks[' + i + '].damages[' + j + '].note=this.value" placeholder="note" style="flex:1"' + editFieldAttr(dfp + '.note') + '>';
+        html += editRevertBtn(dfp + '.note');
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  html += '</div></div>';
+
+  // ── Features (no add/remove - index-referenced) ──
+  html += '<div class="form-section"><div class="form-section-title">Features & Abilities</div>';
+  d.features.forEach(function(f, i) {
+    var ffp = 'features.' + i;
+    html += '<div class="dyn-row" style="flex-direction:column">';
+    html += '<div style="display:flex;gap:0.4rem;width:100%">';
+    html += '<input type="text" value="' + esc(f.name) + '" onchange="editFormData.features[' + i + '].name=this.value" placeholder="Feature name" style="flex:2"' + editFieldAttr(ffp + '.name') + '>';
+    html += editRevertBtn(ffp + '.name');
+    html += '<input type="text" value="' + esc(f.recharge || '') + '" onchange="editFormData.features[' + i + '].recharge=this.value||null" placeholder="5-6" style="width:100px"' + editFieldAttr(ffp + '.recharge') + '>';
+    html += editRevertBtn(ffp + '.recharge');
+    html += '<input type="number" value="' + (f.usesMax || '') + '" onchange="editFormData.features[' + i + '].usesMax=+this.value||null" placeholder="#" style="width:55px"' + editFieldAttr(ffp + '.usesMax') + '>';
+    html += editRevertBtn(ffp + '.usesMax');
+    html += '</div>';
+    html += '<textarea onchange="editFormData.features[' + i + '].desc=this.value" placeholder="Description..." style="width:100%"' + editFieldAttr(ffp + '.desc') + '>' + esc(f.desc) + '</textarea>';
+    html += editRevertBtn(ffp + '.desc');
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // ── Legendary ──
+  html += '<div class="form-section"><div class="form-section-title">Legendary</div>';
+  html += '<div class="form-grid cols-2">';
+  html += editField('Actions/Round', 'number', d.legendaryActionBudget, 'editFormData.legendaryActionBudget=+this.value', 'legendaryActionBudget');
+  html += editField('Resistances', 'number', d.legendaryResistances, 'editFormData.legendaryResistances=+this.value', 'legendaryResistances');
+  html += '</div>';
+  if (d.legendaryActionBudget > 0 || d.legendaryActions.length > 0) {
+    html += '<div style="margin-top:0.5rem">';
+    d.legendaryActions.forEach(function(la, i) {
+      var lfp = 'legendaryActions.' + i;
+      html += '<div class="dyn-row" style="flex-direction:column">';
+      html += '<div style="display:flex;gap:0.4rem;width:100%">';
+      html += '<input type="text" value="' + esc(la.name) + '" onchange="editFormData.legendaryActions[' + i + '].name=this.value" placeholder="Action name" style="flex:2"' + editFieldAttr(lfp + '.name') + '>';
+      html += editRevertBtn(lfp + '.name');
+      html += '<input type="number" value="' + la.cost + '" onchange="editFormData.legendaryActions[' + i + '].cost=+this.value" placeholder="#" style="width:55px"' + editFieldAttr(lfp + '.cost') + '>';
+      html += editRevertBtn(lfp + '.cost');
+      html += '</div>';
+      html += '<textarea onchange="editFormData.legendaryActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%"' + editFieldAttr(lfp + '.desc') + '>' + esc(la.desc) + '</textarea>';
+      html += editRevertBtn(lfp + '.desc');
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // ── Tactics ──
+  html += '<div class="form-section"><div class="form-section-title">Tactics & Notes</div>';
+  html += '<div class="form-field"><div style="display:flex;gap:0.3rem;align-items:flex-start"><textarea rows="3" onchange="editFormData.tactics=this.value" placeholder="How this monster fights..." style="flex:1"' + editFieldAttr('tactics') + '>' + esc(d.tactics) + '</textarea>';
+  html += editRevertBtn('tactics');
+  html += '</div></div></div>';
+
+  // ── Descriptions ──
+  html += '<div class="form-section"><div class="form-section-title">Descriptions</div>';
+  html += '<div class="form-field"><label>Player Description</label>';
+  html += '<div style="display:flex;gap:0.3rem;align-items:flex-start"><textarea rows="3" onchange="editFormData.playerDescription=this.value" placeholder="What players see..." style="flex:1"' + editFieldAttr('playerDescription') + '>' + esc(d.playerDescription || '') + '</textarea>';
+  html += editRevertBtn('playerDescription');
+  html += '</div></div>';
+  html += '<div class="form-field"><label>DM Description</label>';
+  html += '<div style="display:flex;gap:0.3rem;align-items:flex-start"><textarea rows="3" onchange="editFormData.dmDescription=this.value" placeholder="Lore, behavior, SRD reference..." style="flex:1"' + editFieldAttr('dmDescription') + '>' + esc(d.dmDescription || '') + '</textarea>';
+  html += editRevertBtn('dmDescription');
+  html += '</div></div></div>';
+
+  // ── Form Actions ──
+  html += '<div class="form-actions">';
+  html += '<button class="btn-action" onclick="applyEditOverrides()">Apply</button>';
+  html += '<button class="btn-danger" onclick="cancelEditOverrides()">Cancel</button>';
+  html += '</div>';
+
+  el.innerHTML = html;
+}
+
+function editField(label, type, value, onchange, fieldPath) {
+  var modified = !editConflicts.has(fieldPath) && isEditFieldModified(fieldPath);
+  var conflict = editConflicts.has(fieldPath);
+  var html = '<div class="form-field"><label>' + esc(label) + '</label>';
+  html += '<div style="display:flex;gap:0.3rem;align-items:center">';
+  if (type === 'number') {
+    html += '<input type="number" value="' + (value ?? '') + '" onchange="' + onchange + '" style="flex:1"';
+  } else {
+    html += '<input type="text" value="' + esc(value || '') + '" onchange="' + onchange + '" style="flex:1"';
+  }
+  if (conflict) html += ' class="edit-field-conflict" disabled title="Varies across selected combatants"';
+  else if (modified) html += ' class="edit-field-modified"';
+  html += '>';
+  html += editRevertBtn(fieldPath);
+  html += '</div></div>';
+  return html;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // ── Active Combat ──
 // ═══════════════════════════════════════════════════════════════
 
@@ -2467,18 +3116,31 @@ function renderActiveCombat(el) {
   let html = '';
 
   // ── Combat Bar ──
+  var editDisabled = editMode ? ' disabled style="opacity:0.4"' : '';
   html += '<div class="combat-bar">';
   if (state.combats.length > 1) {
-    html += '<button class="btn-sm" onclick="activeCombatId=null;saveCombat();render()" title="Back to combat list">&laquo; List</button>';
+    html += '<button class="btn-sm" onclick="activeCombatId=null;saveCombat();render()" title="Back to combat list"' + editDisabled + '>&laquo; List</button>';
   }
   html += '<span class="round-badge">Round ' + combat.round + '</span>';
   var atStart = combat.round === 1 && combat.turnIndex === 0;
-  html += '<button class="btn-sm" onclick="prevTurn()"' + (atStart ? ' disabled style="opacity:0.4"' : '') + '>&laquo; Prev</button>';
-  html += '<button class="btn-sm btn-action" onclick="nextTurn()">Next &raquo;</button>';
+  html += '<button class="btn-sm" onclick="prevTurn()"' + (editMode ? editDisabled : (atStart ? ' disabled style="opacity:0.4"' : '')) + '>&laquo; Prev</button>';
+  html += '<button class="btn-sm btn-action" onclick="nextTurn()"' + editDisabled + '>Next &raquo;</button>';
   html += '<div class="spacer"></div>';
-  html += '<button class="btn-sm" onclick="showAddCombatantModal()">+ Add</button>';
-  html += '<button class="btn-sm btn-danger" onclick="endCombat()">End Combat</button>';
+  if (editMode && !editFormVisible) {
+    html += '<button class="btn-sm btn-action" onclick="openEditForm()"' + (editSelected.length === 0 ? ' disabled style="opacity:0.4"' : '') + '>Edit Selected</button>';
+  }
+  html += '<button class="btn-sm' + (editMode ? ' btn-warning' : '') + '" onclick="toggleEditMode()">' + (editMode ? 'Exit Edit' : 'Edit Mode') + '</button>';
+  html += '<button class="btn-sm" onclick="showAddCombatantModal()"' + editDisabled + '>+ Add</button>';
+  html += '<button class="btn-sm btn-danger" onclick="endCombat()"' + editDisabled + '>End Combat</button>';
   html += '</div>';
+
+  // ── Edit Form or Combatant Rows ──
+  if (editMode && editFormVisible) {
+    html += '<div id="editOverrideContainer"></div>';
+    el.innerHTML = html;
+    renderEditOverrideForm();
+    return;
+  }
 
   // ── Column Headers ──
   html += '<div class="combatant-row" style="border:none;background:none;cursor:default;padding:0.2rem 0.75rem;margin-bottom:0;min-height:0">';
@@ -2498,14 +3160,26 @@ function renderActiveCombat(el) {
     let rowClasses = 'combatant-row';
     if (isCurrent) rowClasses += ' current-turn';
     if (isDead) rowClasses += ' is-dead';
+    // Dim non-selectable rows in edit mode
+    var editDimmed = editMode && !editFormVisible && c.type === 'monster' && editLockedTemplateId !== null && c.templateId !== editLockedTemplateId;
 
-    html += '<div class="' + rowClasses + '" onclick="toggleCombatantDetail(' + idx + ')">';
+    html += '<div class="' + rowClasses + '"' + (editDimmed ? ' style="opacity:0.35"' : '') + ' onclick="toggleCombatantDetail(' + idx + ')">';
 
-    // Init
-    html += '<span class="init-val">' + (c.init !== null && c.init !== undefined ? Math.floor(c.init) : '-') + '</span>';
+    // Init (or checkbox in edit mode)
+    if (editMode && !editFormVisible && c.type === 'monster') {
+      var canSelect = editLockedTemplateId === null || c.templateId === editLockedTemplateId;
+      var isChecked = editSelected.indexOf(c.id) >= 0;
+      html += '<span class="init-val"><input type="checkbox" class="edit-checkbox"' + (isChecked ? ' checked' : '') + (!canSelect && !isChecked ? ' disabled' : '') + ' onclick="event.stopPropagation();toggleEditSelect(\'' + c.id + '\',\'' + c.templateId + '\')" /></span>';
+    } else {
+      html += '<span class="init-val">' + (c.init !== null && c.init !== undefined ? Math.floor(c.init) : '-') + '</span>';
+    }
 
     // Name + badges
-    html += '<span class="combatant-name type-' + c.type + '">' + esc(c.name);
+    var hasOvr = c.type === 'monster' && c.overrides && Object.keys(c.overrides).length > 0;
+    html += '<span class="combatant-name type-' + c.type + (hasOvr ? ' has-overrides' : '') + '">' + esc(c.name);
+    if (hasOvr) {
+      html += '<span class="override-badge" title="Modified">\u2726</span>';
+    }
     if (c.type === 'monster' && template) {
       if (template.legendaryActionBudget > 0) {
         const laRemaining = c.legendaryActionsRemaining !== undefined ? c.legendaryActionsRemaining : template.legendaryActionBudget;
@@ -2535,7 +3209,7 @@ function renderActiveCombat(el) {
 
     // AC
     if (c.type === 'monster' && template) {
-      html += '<span class="ac-val">' + resolveField(c, 'ac') + '</span>';
+      html += '<span class="ac-val">' + ovh(c, 'ac', '' + template.ac) + '</span>';
     } else if (c.type === 'player' && c.ac) {
       html += '<span class="ac-val">' + c.ac + '</span>';
     } else {
@@ -2544,7 +3218,7 @@ function renderActiveCombat(el) {
 
     // HP bar (monsters only)
     if (c.type === 'monster' && template) {
-      const maxHp = resolveField(c, 'hpMax');
+      const maxHp = template.hpMax;
       const curHp = c.currentHp !== undefined ? c.currentHp : maxHp;
       const tempHp = c.tempHp || 0;
       const pct = maxHp > 0 ? Math.max(0, Math.min(100, Math.round((curHp / maxHp) * 100))) : 0;
@@ -2585,12 +3259,12 @@ function renderCombatantDetail(c, idx, template) {
     html += '<div>';
 
     // HP Controls
-    const maxHp = resolveField(c, 'hpMax');
+    const maxHp = template.hpMax;
     const curHp = c.currentHp !== undefined ? c.currentHp : maxHp;
     const tempHp = c.tempHp || 0;
     html += '<div class="detail-section-title">Hit Points</div>';
     html += '<div style="font-family:var(--mono);font-size:0.82rem;margin-bottom:0.3rem">';
-    html += '<strong>' + curHp + '</strong> / ' + maxHp;
+    html += '<strong>' + curHp + '</strong> / ' + ovh(c, 'hpMax', '' + maxHp);
     if (tempHp > 0) html += ' <span style="color:var(--accent)">(+' + tempHp + ' temp)</span>';
     html += '</div>';
     html += '<div class="hp-controls">';
@@ -2602,7 +3276,7 @@ function renderCombatantDetail(c, idx, template) {
 
     // Multiattack
     if (template.multiattack) {
-      html += '<div class="multiattack-box">Multiattack: ' + esc(template.multiattack) + '</div>';
+      html += '<div class="multiattack-box">' + ovh(c, 'multiattack', 'Multiattack: ' + esc(template.multiattack)) + '</div>';
     }
 
     // Attacks
@@ -2611,24 +3285,21 @@ function renderCombatantDetail(c, idx, template) {
       template.attacks.forEach((atk, atkIdx) => {
         html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
         html += '<div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">';
-        html += '<strong style="font-size:0.8rem">' + esc(atk.name) + '</strong>';
+        html += '<strong style="font-size:0.8rem">' + ovh(c, 'attacks.' + atkIdx + '.name', esc(atk.name)) + '</strong>';
         html += '<span style="font-family:var(--mono);font-size:0.72rem;color:var(--text-dim)">';
-        html += (atk.bonus >= 0 ? '+' : '') + atk.bonus + ' to hit';
-        if (atk.note) html += ' &middot; ' + esc(atk.note);
+        html += ovh(c, 'attacks.' + atkIdx + '.bonus', (atk.bonus >= 0 ? '+' : '') + atk.bonus) + ' to hit';
+        if (atk.note) html += ' &middot; ' + ovh(c, 'attacks.' + atkIdx + '.note', esc(atk.note));
         html += '</span>';
         html += '<div class="spacer"></div>';
-        html += '<button class="btn-sm" onclick="event.stopPropagation();rollAttack(' + idx + ',' + atkIdx + ')">Atk</button>';
-        html += '<button class="btn-sm btn-success" onclick="event.stopPropagation();rollAttack(' + idx + ',' + atkIdx + ',\'advantage\')">Adv</button>';
-        html += '<button class="btn-sm btn-danger" onclick="event.stopPropagation();rollAttack(' + idx + ',' + atkIdx + ',\'disadvantage\')">Dis</button>';
+        html += '<button class="btn-sm" onclick="showRollPopup(event,\'rollAttack\',' + idx + ',' + atkIdx + ')">Atk</button>';
         if (atk.damages && atk.damages.length > 0) {
-          html += '<button class="btn-sm" onclick="event.stopPropagation();rollDamageForAttack(' + idx + ',' + atkIdx + ')">Dmg</button>';
-          html += '<button class="btn-sm btn-success" onclick="event.stopPropagation();rollDamageForAttack(' + idx + ',' + atkIdx + ',true)">Crit</button>';
+          html += '<button class="btn-sm" onclick="showDmgPopup(event,' + idx + ',' + atkIdx + ')">Dmg</button>';
         }
         html += '</div>';
         // Damage summary
         if (atk.damages && atk.damages.length > 0) {
           html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:0.15rem">';
-          html += atk.damages.map(dm => esc(dm.dice) + ' ' + esc(dm.type) + (dm.note ? ' (' + esc(dm.note) + ')' : '')).join(' + ');
+          html += atk.damages.map(function(dm, dmIdx) { return ovh(c, 'attacks.' + atkIdx + '.damages.' + dmIdx + '.dice', esc(dm.dice)) + ' ' + ovh(c, 'attacks.' + atkIdx + '.damages.' + dmIdx + '.type', esc(dm.type)) + (dm.note ? ' (' + ovh(c, 'attacks.' + atkIdx + '.damages.' + dmIdx + '.note', esc(dm.note)) + ')' : ''); }).join(' + ');
           html += '</div>';
         }
         html += '</div>';
@@ -2656,17 +3327,17 @@ function renderCombatantDetail(c, idx, template) {
     html += '<div style="font-size:0.72rem;color:var(--text-muted);display:grid;grid-template-columns:repeat(2,1fr);gap:0.15rem 0.5rem">';
     ABILITIES.forEach(ab => {
       html += '<div style="display:flex;align-items:center;gap:0.3rem">';
-      html += '<span style="min-width:4.5em">' + ab.toUpperCase() + ' ' + template.abilities[ab] + ' (' + modStr(template.abilities[ab]) + ')</span>';
-      html += '<button class="btn-sm btn-accent" style="font-size:0.6rem;padding:0.05rem 0.25rem" onclick="event.stopPropagation();rollAbilityCheck(' + idx + ',\'' + ab + '\')">Chk</button>';
-      html += '<button class="btn-sm btn-accent" style="font-size:0.6rem;padding:0.05rem 0.25rem" onclick="event.stopPropagation();rollSavingThrow(' + idx + ',\'' + ab + '\')">Save</button>';
+      html += '<span style="min-width:4.5em">' + ab.toUpperCase() + ' ' + ovh(c, 'abilities.' + ab, template.abilities[ab] + ' (' + modStr(template.abilities[ab]) + ')') + '</span>';
+      html += '<button class="btn-sm btn-accent" style="font-size:0.6rem;padding:0.05rem 0.25rem" onclick="showRollPopup(event,\'rollAbilityCheck\',' + idx + ',\'' + ab + '\')">Chk</button>';
+      html += '<button class="btn-sm btn-accent" style="font-size:0.6rem;padding:0.05rem 0.25rem" onclick="showRollPopup(event,\'rollSavingThrow\',' + idx + ',\'' + ab + '\')">Save</button>';
       html += '</div>';
     });
     html += '</div>';
 
     // Speed, senses
     html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:0.3rem">';
-    if (template.speed) html += 'Speed: ' + esc(template.speed) + '<br>';
-    if (template.senses) html += 'Senses: ' + esc(template.senses) + '<br>';
+    if (template.speed) html += 'Speed: ' + ovh(c, 'speed', esc(template.speed)) + '<br>';
+    if (template.senses) html += 'Senses: ' + ovh(c, 'senses', esc(template.senses)) + '<br>';
     html += '</div>';
 
     // Features
@@ -2675,8 +3346,8 @@ function renderCombatantDetail(c, idx, template) {
       template.features.forEach((f, fIdx) => {
         html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
         html += '<div style="font-size:0.75rem;display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">';
-        html += '<strong>' + esc(f.name) + '</strong>';
-        if (f.recharge) html += '<span style="color:var(--warning)">(Recharge ' + esc(f.recharge) + ')</span>';
+        html += '<strong>' + ovh(c, 'features.' + fIdx + '.name', esc(f.name)) + '</strong>';
+        if (f.recharge) html += '<span style="color:var(--warning)">' + ovh(c, 'features.' + fIdx + '.recharge', '(Recharge ' + esc(f.recharge) + ')') + '</span>';
         if (f.usesMax) {
           const remaining = c.featureUses && c.featureUses[fIdx] !== undefined ? c.featureUses[fIdx] : f.usesMax;
           html += '<span style="font-family:var(--mono);font-size:0.72rem;color:' + (remaining === 0 ? 'var(--error)' : 'var(--text-dim)') + '">Uses: ' + remaining + '/' + f.usesMax + '</span>';
@@ -2691,7 +3362,9 @@ function renderCombatantDetail(c, idx, template) {
         }
         html += '</div>';
         if (f.desc) {
-          html += '<div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem">' + renderDiceText(esc(f.desc), idx, 'feature', fIdx) + '</div>';
+          var fDescHtml = renderDiceText(esc(f.desc), idx, 'feature', fIdx);
+          if (isFieldOverridden(c, 'features.' + fIdx + '.desc')) fDescHtml = '<span class="override-highlight">' + fDescHtml + '</span>';
+          html += '<div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem">' + fDescHtml + '</div>';
         }
         html += '</div>';
       });
@@ -2707,12 +3380,14 @@ function renderCombatantDetail(c, idx, template) {
         const canUse = laRemaining >= la.cost;
         html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
         html += '<div style="font-size:0.75rem;display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">';
-        html += '<strong>' + esc(la.name) + '</strong>';
-        html += '<span style="font-family:var(--mono);font-size:0.68rem;color:var(--text-dim)">Cost: ' + la.cost + '</span>';
+        html += '<strong>' + ovh(c, 'legendaryActions.' + laIdx + '.name', esc(la.name)) + '</strong>';
+        html += '<span style="font-family:var(--mono);font-size:0.68rem;color:var(--text-dim)">' + ovh(c, 'legendaryActions.' + laIdx + '.cost', 'Cost: ' + la.cost) + '</span>';
         html += '<button class="btn-sm btn-accent"' + (!canUse ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();useLegendaryAction(' + idx + ',' + laIdx + ')"' + (!canUse ? ' disabled' : '') + '>Use</button>';
         html += '</div>';
         if (la.desc) {
-          html += '<div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem">' + renderDiceText(esc(la.desc), idx, 'la', laIdx) + '</div>';
+          var laDescHtml = renderDiceText(esc(la.desc), idx, 'la', laIdx);
+          if (isFieldOverridden(c, 'legendaryActions.' + laIdx + '.desc')) laDescHtml = '<span class="override-highlight">' + laDescHtml + '</span>';
+          html += '<div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem">' + laDescHtml + '</div>';
         }
         html += '</div>';
       });
@@ -2759,6 +3434,9 @@ function renderCombatantDetail(c, idx, template) {
     html += '<button class="btn-sm btn-danger" onclick="event.stopPropagation();killCombatant(' + idx + ')">Kill</button>';
   }
   html += '<button class="btn-sm btn-danger" onclick="event.stopPropagation();removeCombatant(' + idx + ')">Remove</button>';
+  if (c.type === 'monster') {
+    html += '<button class="btn-sm btn-accent" onclick="event.stopPropagation();editSingleCombatant(' + idx + ')">Edit</button>';
+  }
   html += '</div>';
 
   // ── Conditions (all combatant types) ──
@@ -2820,19 +3498,19 @@ function renderCombatantDetail(c, idx, template) {
       html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
       html += '<div style="display:flex;align-items:center;gap:0.3rem;margin-bottom:0.15rem"><span style="font-size:0.68rem;font-weight:700;color:var(--text-muted)">Tactics</span><div class="spacer"></div>';
       html += '<button class="btn-sm" onclick="event.stopPropagation();copyDescText(this,\'tactics\',' + idx + ')" style="font-size:0.6rem;padding:0.1rem 0.4rem">Copy</button></div>';
-      html += '<div style="font-size:0.75rem;color:var(--text-muted);white-space:pre-wrap">' + esc(template.tactics) + '</div></div>';
+      html += '<div style="font-size:0.75rem;color:var(--text-muted);white-space:pre-wrap">' + ovh(c, 'tactics', esc(template.tactics)) + '</div></div>';
     }
     if (template.playerDescription) {
       html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
       html += '<div style="display:flex;align-items:center;gap:0.3rem;margin-bottom:0.15rem"><span style="font-size:0.68rem;font-weight:700;color:var(--accent)">Player Description</span><div class="spacer"></div>';
       html += '<button class="btn-sm" onclick="event.stopPropagation();copyDescText(this,\'player\',' + idx + ')" style="font-size:0.6rem;padding:0.1rem 0.4rem">Copy</button></div>';
-      html += '<div style="font-size:0.75rem;color:var(--text-muted);white-space:pre-wrap">' + esc(template.playerDescription) + '</div></div>';
+      html += '<div style="font-size:0.75rem;color:var(--text-muted);white-space:pre-wrap">' + ovh(c, 'playerDescription', esc(template.playerDescription)) + '</div></div>';
     }
     if (template.dmDescription) {
       html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
       html += '<div style="display:flex;align-items:center;gap:0.3rem;margin-bottom:0.15rem"><span style="font-size:0.68rem;font-weight:700;color:var(--warning)">DM Description</span><div class="spacer"></div>';
       html += '<button class="btn-sm" onclick="event.stopPropagation();copyDescText(this,\'dm\',' + idx + ')" style="font-size:0.6rem;padding:0.1rem 0.4rem">Copy</button></div>';
-      html += '<div style="font-size:0.75rem;color:var(--text-muted);white-space:pre-wrap">' + esc(template.dmDescription) + '</div></div>';
+      html += '<div style="font-size:0.75rem;color:var(--text-muted);white-space:pre-wrap">' + ovh(c, 'dmDescription', esc(template.dmDescription)) + '</div></div>';
     }
     html += '</div>';
   }
@@ -3003,7 +3681,8 @@ function applyDamage(idx) {
   if (dmg === 0) return;
 
   const c = getActiveCombat().combatants[idx];
-  const maxHp = resolveField(c, 'hpMax');
+  const template = getTemplate(c);
+  const maxHp = template ? template.hpMax : c.currentHp;
 
   // THP absorbs first
   let tempHp = c.tempHp || 0;
@@ -3043,7 +3722,8 @@ function applyHeal(idx) {
   if (heal === 0) return;
 
   const c = getActiveCombat().combatants[idx];
-  const maxHp = resolveField(c, 'hpMax');
+  const template = getTemplate(c);
+  const maxHp = template ? template.hpMax : c.currentHp;
   let curHp = c.currentHp !== undefined ? c.currentHp : maxHp;
   curHp = Math.min(curHp + heal, maxHp);
   c.currentHp = curHp;
@@ -3186,20 +3866,77 @@ function restoreLegendaryAction(combatantIdx) {
 // ── Ability Check / Save Rolling ──
 // ═══════════════════════════════════════════════════════════════
 
-function rollAbilityCheck(combatantIdx, ability) {
+// ── Roll Mode Popup ──
+var rollPopupState = null;
+
+function positionPopup(popup, target) {
+  var rect = target.getBoundingClientRect();
+  popup.style.display = 'flex';
+  popup.style.left = rect.left + 'px';
+  popup.style.top = (rect.bottom + 4) + 'px';
+}
+
+function showRollPopup(evt, rollFnName, combatantIdx, param) {
+  evt.stopPropagation();
+  rollPopupState = { fnName: rollFnName, idx: combatantIdx, param: param };
+  var popup = document.getElementById('rollModePopup');
+  if (!popup) return;
+  popup.innerHTML =
+    '<button class="btn-sm btn-danger" onclick="fireRollPopup(\'disadvantage\')">Disadvantage</button>' +
+    '<button class="btn-sm" onclick="fireRollPopup()">Normal</button>' +
+    '<button class="btn-sm btn-success" onclick="fireRollPopup(\'advantage\')">Advantage</button>';
+  positionPopup(popup, evt.target);
+}
+
+function showDmgPopup(evt, combatantIdx, attackIdx) {
+  evt.stopPropagation();
+  rollPopupState = { idx: combatantIdx, param: attackIdx };
+  var popup = document.getElementById('rollModePopup');
+  if (!popup) return;
+  popup.innerHTML =
+    '<button class="btn-sm" onclick="fireDmgPopup(false)">Normal</button>' +
+    '<button class="btn-sm btn-success" onclick="fireDmgPopup(true)">Crit</button>';
+  positionPopup(popup, evt.target);
+}
+
+function fireRollPopup(mode) {
+  if (!rollPopupState) return;
+  var s = rollPopupState;
+  hideRollPopup();
+  window[s.fnName](s.idx, s.param, mode);
+}
+
+function fireDmgPopup(crit) {
+  if (!rollPopupState) return;
+  var s = rollPopupState;
+  hideRollPopup();
+  rollDamageForAttack(s.idx, s.param, crit);
+}
+
+function hideRollPopup() {
+  rollPopupState = null;
+  var popup = document.getElementById('rollModePopup');
+  if (popup) popup.style.display = 'none';
+}
+
+document.addEventListener('click', hideRollPopup);
+
+function rollAbilityCheck(combatantIdx, ability, mode) {
   const c = getActiveCombat().combatants[combatantIdx];
   const template = getTemplate(c);
   if (!template) return;
   const mod = abilityMod(template.abilities[ability]);
   const notation = '1d20' + (mod >= 0 ? '+' + mod : String(mod));
-  const result = rollDice(notation);
+  const opts = mode === 'advantage' ? { advantage: true } : mode === 'disadvantage' ? { disadvantage: true } : {};
+  const result = rollDice(notation, opts);
+  const modeLabel = mode === 'advantage' ? ' (Adv)' : mode === 'disadvantage' ? ' (Dis)' : '';
   if (!c.rollLog) c.rollLog = [];
-  c.rollLog.push({ label: ability.toUpperCase() + ' Check', text: esc(result.text) + ' = ' + result.total, cssClass: '' });
+  c.rollLog.push({ label: ability.toUpperCase() + ' Check' + modeLabel, text: esc(result.text) + ' = ' + result.total, cssClass: '' });
   saveCombat();
   renderRollLog(combatantIdx);
 }
 
-function rollSavingThrow(combatantIdx, ability) {
+function rollSavingThrow(combatantIdx, ability, mode) {
   const c = getActiveCombat().combatants[combatantIdx];
   const template = getTemplate(c);
   if (!template) return;
@@ -3207,9 +3944,11 @@ function rollSavingThrow(combatantIdx, ability) {
   const st = template.savingThrows && template.savingThrows.find(s => s.ability === ability);
   const mod = st ? st.bonus : abilityMod(template.abilities[ability]);
   const notation = '1d20' + (mod >= 0 ? '+' + mod : String(mod));
-  const result = rollDice(notation);
+  const opts = mode === 'advantage' ? { advantage: true } : mode === 'disadvantage' ? { disadvantage: true } : {};
+  const result = rollDice(notation, opts);
+  const modeLabel = mode === 'advantage' ? ' (Adv)' : mode === 'disadvantage' ? ' (Dis)' : '';
   if (!c.rollLog) c.rollLog = [];
-  c.rollLog.push({ label: ability.toUpperCase() + ' Save' + (st ? ' (prof)' : ''), text: esc(result.text) + ' = ' + result.total, cssClass: '' });
+  c.rollLog.push({ label: ability.toUpperCase() + ' Save' + (st ? ' (prof)' : '') + modeLabel, text: esc(result.text) + ' = ' + result.total, cssClass: '' });
   saveCombat();
   renderRollLog(combatantIdx);
 }

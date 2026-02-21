@@ -141,6 +141,61 @@ Click a card to resume that combat. From inside an active combat, click **<< Lis
 - **Multiple tables** - running games for different groups? Each combat lives independently with its own state
 - **Interruptions** - a running encounter gets interrupted by a second fight elsewhere
 
+## Combat Overrides (Editing Monsters Mid-Combat)
+
+DMs frequently need to modify monster stats during combat - buffs from spells, debuffs from abilities, Dispel Magic removing enhancements, or homebrew adjustments. Combat overrides let you edit any template field on in-flight monsters without permanently altering the original template.
+
+### How Overrides Work
+
+Each monster combatant can have a sparse set of overrides - only the fields you change are stored. The original template stays intact. When combat code reads a monster's stats, it automatically merges the overrides on top of the template. If you remove all overrides, the monster reverts to its original stats.
+
+### Single Edit
+
+Click the **Edit** button in any monster's expanded detail panel (in the common controls area). This opens the override edit form for that one combatant.
+
+### Batch Edit
+
+To apply the same change to multiple monsters of the same type (e.g., all 5 goblins hit by the same buff):
+
+1. Click **Edit Mode** in the combat bar - this disables combat controls (Prev/Next/+Add/End Combat) so combat cannot advance while editing
+2. Checkboxes appear on each monster row. Click to select targets.
+3. The first selection locks to that monster's template - only same-template monsters can be selected together. Other templates are greyed out.
+4. Click **Edit Selected** to open the edit form
+
+### The Edit Form
+
+The form looks similar to the template editor, pre-populated with each combatant's effective values (template + any existing overrides).
+
+- **Modified fields** are highlighted with a colored border and show a **revert button** next to the field. Click the revert button to reset that field back to the template value.
+- **Saving throws and skills** support per-item revert. If you modify, add, or delete individual saves/skills, each item gets its own revert button. Deleted items (from the template) appear struck-through with a restore button.
+- **Saving throws and skills can be added and removed** (they are referenced by name in combat code).
+- **Attacks, features, and legendary actions cannot be added or removed** (they are referenced by array index in combat state - feature uses, attack rolls, etc.). You can edit their values but not change the count.
+
+### Applying Overrides
+
+Click **Apply** to write the changes. For each selected combatant, a minimal delta is computed (only fields that differ from the template). Fields reverted to template values are excluded from the delta.
+
+Click **Cancel** to discard changes. Both Apply and Cancel exit edit mode entirely.
+
+### Conflicting Values in Batch Edit
+
+When batch-editing multiple monsters that already have different overrides for the same field:
+- Fields where all selected combatants agree: **editable**, showing the shared value
+- Fields where selected combatants disagree: **disabled**, showing "varies". These fields are preserved as-is for each combatant when you Apply.
+
+### Visual Indicators
+
+- **Row badge**: Monsters with active overrides show a visual indicator next to their name in the initiative list, with the name in accent color
+- **Detail panel highlighting**: All overridden values are highlighted wherever they appear - AC, abilities, attacks, damage, features, speeds, senses, etc.
+
+### What Overrides Do NOT Affect
+
+Instance state stays on the combatant directly: current HP, temp HP, conditions, concentration, legendary actions/resistances remaining, feature uses, roll log, notes, reaction state, and dead status. These are combat-instance state, not template fields.
+
+### HP Note
+
+Overriding HP max does not auto-adjust current HP. If you increase a monster's max HP, heal it separately. If current HP ends up above the new max, the HP bar shows it and the DM adjusts manually.
+
 ## Ending Combat
 
 Click **End Combat** (red) in the top bar. This permanently removes the combat and all its state. Monster templates and encounters are not affected - only the in-progress combat data is deleted.

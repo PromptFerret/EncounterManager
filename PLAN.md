@@ -30,8 +30,8 @@ Built for heroic/homebrew D&D - CR100 monsters, level 60 players, non-standard r
 - Detail panel (players): AC input, notes
 - Detail panel (all): init edit, notes, kill/revive/remove
 - HP tracking: single input + Dmg(red)/Heal(green)/THP(yellow) buttons. THP takes higher (doesn't stack per D&D rules)
-- Attack rolling: Atk/Adv(green)/Dis(red) buttons per attack. Crit detection on chosen d20
-- Damage rolling: Dmg/Crit(green) buttons. Crit doubles dice count not modifiers (NdM → 2NdM)
+- Attack rolling: Atk button per attack opens roll mode popup (Disadvantage/Normal/Advantage). Crit detection on chosen d20
+- Damage rolling: Dmg button opens popup (Normal/Crit). Crit doubles dice count not modifiers (NdM → 2NdM)
 - Crit highlighting: nat 20 green/bold "NAT 20!", nat 1 red/bold "NAT 1"
 - Roll log: stacking chronological log per combatant, persisted to localStorage, survives refreshes, clears on that combatant's next turn start
 - Multiattack: prominent yellow-bordered box with "Multiattack:" prefix
@@ -52,7 +52,7 @@ Built for heroic/homebrew D&D - CR100 monsters, level 60 players, non-standard r
 - Legendary actions: LA budget display on row (badge) and detail panel, per-action Use buttons (cost-aware), Restore LA button for DM take-backs, auto-recharge on turn start
 - Legendary resistances: LR counter on row (badge) and detail panel, Use LR + Restore LR buttons
 - LA/LR use and restore actions logged to combatant rollLog
-- Ability check/save rolling: Chk/Save buttons per ability score in monster detail panel stats section
+- Ability check/save rolling: Chk/Save buttons per ability score in monster detail panel stats section, each opens roll mode popup (Disadvantage/Normal/Advantage)
 - Condition/effect tracking: 14 standard D&D conditions + custom text, three duration types (rounds/save-based/indefinite), condition chips on ALL combatant rows, add/remove UI in all detail panels
 - Concentration tracking: text input per combatant, chip on row, damage triggers CON save DC warning (`max(10, damage/2)`)
 - Consolidated turn-start hook: `applyTurnStartEffects(idx)` handles reaction reset, rollLog clear, recharge prompts, LA recharge, condition decrement/save reminders
@@ -212,27 +212,31 @@ Tactics, player description, and DM description shown in a collapsible "Tactics 
 - `activeCombatId` and `autoExpandedId` persisted in `state.preferences` - combat and auto-expanded panel survive page refresh
 - Prev button disabled at round 1, first combatant (no prior turn to go back to)
 
-## Phase 5 - Combat Overrides (In-Combat Monster Editing)
+## Phase 5 - Combat Overrides (In-Combat Monster Editing) (done)
 
 Edit any template field on in-flight monster combatants without modifying the original template. Supports single and batch editing with sparse delta overrides.
 
 ### Core: Sparse Override System
 
-Combatants already have an `overrides` object and a `resolveField(c, field)` helper that checks `c.overrides[field]` before falling back to the template. This is already used for `ac` and `hpMax` in combat rendering. Phase 5 extends this to handle nested objects and arrays via `deepMerge`, replacing the flat field-by-field resolution with a full recursive merge.
+`getTemplate(c)` returns `deepMerge(rawTemplate, c.overrides)` when overrides exist, otherwise the raw template. `getRawTemplate(c)` returns the unmerged template for edit form diffing. `resolveField()` was removed - all call sites replaced with direct template property access.
 
 #### `deepMerge(template, overrides)`
 
 Recursive merge producing a complete template-shaped object:
 - Simple fields (string, number, boolean): override wins if present
 - Objects (abilities, etc.): recursive merge
-- Arrays (attacks, features, saves, skills, legendaryActions): merge by index. If `overrides[i]` is null/undefined, use `template[i]`. If `overrides[i]` exists, deep merge `template[i]` with `overrides[i]`. Override arrays are always same length or shorter than template arrays (no adding/removing elements).
+- Arrays: **two behaviors based on length**:
+  - Same length as base: index-based merge. `overrides[i]` is null = use `base[i]`. `overrides[i]` exists = deep merge. Used for attacks, features, legendaryActions (index-referenced, cannot add/remove).
+  - Different length from base: full replacement. Used for savingThrows, skills (name-referenced, can add/remove).
 
 #### `sparseOverrides(template, edited)`
 
 Produces a sparse override object by diffing an edited copy against the template:
 - Simple fields: include only if value differs from template
 - Objects: recurse, include only sub-keys that differ
-- Arrays: compare by index, include only indices where values differ (null for unchanged indices). Omit array entirely if no indices changed.
+- Arrays: **two behaviors based on length**:
+  - Same length: compare by index, include only changed indices (null for unchanged). Omit array if no indices changed.
+  - Different length: store the full edited array (it is a replacement).
 
 ~15-20 lines of vanilla JS. No external dependencies.
 
@@ -263,8 +267,8 @@ Instance state stays on the combatant directly (not in overrides): `currentHp`, 
 
 #### Constraints
 
-- **No adding array elements**: Cannot add new attacks, features, or legendary actions via overrides. Use the combatant notes field for temporary additions. This keeps array indices stable and avoids index collision with template edits.
-- **No removing array elements**: Cannot remove template-defined attacks/features/legendary actions. Only values within existing elements can be changed. Notes field for narrative removals ("Lost bite - teeth punched out by barb").
+- **Index-referenced arrays (attacks, features, legendaryActions)**: Cannot add or remove elements. Array indices are referenced by combat state (`featureUses[fIdx]`, `rollAttack(cIdx, atkIdx)`, `useLegendaryAction(cIdx, laIdx)`, `rollInlineDice(..., sourceIdx)`). Only values within existing elements can be changed.
+- **Name-referenced arrays (savingThrows, skills)**: Can add and remove elements. These are looked up by name (`savingThrows.find(s => s.ability === ability)`, `skills.find(s => s.name === 'Perception')`), so index changes are safe. Useful for buffs, potions, items.
 - **HP interaction**: Overriding `hpMax` does not auto-adjust `currentHp`. The DM heals/damages separately via the combat screen. If `currentHp` ends up above the new `hpMax`, the HP bar shows it - the DM adjusts manually.
 - **Backward compatibility**: Old combats without `overrides` work naturally: `deepMerge(template, c.overrides || {})` with empty overrides returns the template unchanged. No migration needed.
 
@@ -315,14 +319,18 @@ Combatants with active overrides show a visual indicator (badge or pip) on their
 
 Overridden values are highlighted wherever they appear in the detail panel - AC, abilities, attack bonuses, damage dice, feature descriptions, etc. The highlighting matches the edit form styling so the DM sees the same visual language inside and outside the editor.
 
-### Implementation Order
+### Implementation Order (all done)
 
-1. `deepMerge()` and `sparseOverrides()` utility functions
-2. Insert merge at template lookup points in combat rendering, replacing `resolveField()` usage (verify all fields resolve correctly)
-3. Batch edit mode: Edit Mode toggle, checkboxes, template filter, form in combat-override mode, save/reset logic, batch apply
-4. Conflicting-field detection for batch edit
-5. Single edit shortcut: Edit button on monster panel, pre-selects and opens batch edit for one combatant
-6. Visual indicators on rows and detail panel
+1. `deepMerge()` and `sparseOverrides()` utility functions + `isFieldOverridden()` + `getRawTemplate()`
+2. Modified `getTemplate()` to return merged result, removed `resolveField()` and all 5 call sites
+3. Edit mode state (7 transient variables), combat bar toggle, controls lockout
+4. Checkboxes with template locking, row dimming for non-selectable templates
+5. Edit form (`renderEditOverrideForm()`) with revert buttons, conflict detection, save/skill add/remove
+6. Apply/Cancel logic with conflict field preservation, exit edit mode
+7. Single edit shortcut: Edit button on monster detail panel
+8. Visual indicators: override badge on rows, `ovh()` highlight wrapper on all detail panel fields
+9. Per-item save/skill revert: match by name (ability for saves, skill name for skills), deleted items shown struck-through with restore button, added items show revert button (removes them)
+10. Roll mode popup: replaced inline Dis/Adv buttons on attacks, checks, saves, and damage with click-to-popup menus (Dis/Normal/Adv for d20 rolls, Normal/Crit for damage)
 
 ## Future Phases
 
@@ -614,7 +622,7 @@ Detection and parsing:
 ## Key Architecture Decisions
 
 ### Sparse Delta Pattern
-Combat instances only store what differs from the template. Currently uses `resolveField(c, field)` for flat fields (`ac`, `hpMax`). Phase 5 extends this to `deepMerge(template, c.overrides || {})` for nested objects and arrays. Overrides mirror the template structure but only contain changed values. This keeps combat state small and allows template edits to propagate to non-overridden fields.
+Combat instances only store what differs from the template. `getTemplate(c)` returns `deepMerge(rawTemplate, c.overrides)` when overrides exist, otherwise the raw template. `sparseOverrides(base, edited)` produces minimal delta objects. Overrides mirror the template structure but only contain changed values. This keeps combat state small and allows template edits to propagate to non-overridden fields. Array merge behavior differs by reference style: same-length = index-based sparse (attacks/features/LAs), different-length = full replacement (saves/skills).
 
 ### Single-File, No Dependencies
 Same as all PromptFerret tools. All CSS and JS inline in `index.html`. Works from `file://` and GitHub Pages. No build step.

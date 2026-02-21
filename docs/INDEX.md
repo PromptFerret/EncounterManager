@@ -21,7 +21,7 @@ EncounterManager is a D&D combat manager for DMs. Build monster stat blocks, org
 | [Monster Templates](MONSTER_TEMPLATES.md) | Creating and editing monster stat blocks - abilities, attacks, features, legendary actions |
 | [Parties & Encounters](PARTIES_AND_ENCOUNTERS.md) | Setting up player parties and building encounters from your monster templates |
 | [Running Combat](RUNNING_COMBAT.md) | Starting combat, initiative, turns, HP, attacks, dice rolling, the roll log, adding combatants mid-combat |
-| [Combat Deep Dive](COMBAT_DEEP_DIVE.md) | Conditions, concentration, legendary actions and resistances, feature tracking, reactions, multi-combat |
+| [Combat Deep Dive](COMBAT_DEEP_DIVE.md) | Conditions, concentration, legendary actions and resistances, feature tracking, reactions, combat overrides (editing monsters mid-combat), multi-combat |
 | [Import & Export](IMPORT_EXPORT.md) | Backups, restoring data, sharing monsters, the SquishText format |
 | [Monster Format](MONSTER_FORMAT.md) | JSON schema reference for creating or generating monsters with external tools or AI |
 

@@ -66,12 +66,9 @@ If the template has multiattack text, it shows here as a reminder (e.g., "Two cl
 
 For each attack defined on the template:
 - Attack name, hit bonus, and note
-- Five buttons:
-  - **Atk** - rolls 1d20 + hit bonus (normal)
-  - **Adv** (green) - rolls with advantage (two d20s, takes higher)
-  - **Dis** (red) - rolls with disadvantage (two d20s, takes lower)
-  - **Dmg** - rolls all damage dice for this attack
-  - **Crit** (green) - rolls critical damage (doubles the dice count, not the modifier)
+- Two buttons that open roll mode popups:
+  - **Atk** - click to choose: Disadvantage, Normal, or Advantage. Normal rolls 1d20 + hit bonus. Advantage rolls two d20s and takes the higher. Disadvantage takes the lower.
+  - **Dmg** - click to choose: Normal or Crit. Normal rolls all damage dice. Crit doubles the dice count (not the modifier).
 - Damage summary showing dice + type for each damage entry
 
 All roll results appear in the **roll log** below the attacks. Crits show as "NAT 20!" and fumbles show as "NAT 1".
@@ -86,9 +83,9 @@ If the combatant's panel is collapsed and there are unread roll entries, a pulsi
 
 **Ability Scores**
 
-Shows all six scores with modifiers (e.g., "STR 16 (+3)"). Each has two buttons:
-- **Chk** - rolls an ability check (1d20 + modifier)
-- **Save** - rolls a saving throw (1d20 + save bonus if proficient, otherwise modifier)
+Shows all six scores with modifiers (e.g., "STR 16 (+3)"). Each has two buttons that open roll mode popups:
+- **Chk** - click to choose: Disadvantage, Normal, or Advantage. Rolls 1d20 + ability modifier.
+- **Save** - click to choose: Disadvantage, Normal, or Advantage. Rolls 1d20 + save bonus (if proficient from template saving throws) or ability modifier.
 
 **Speed and Senses** - shown if defined on the template.
 
@@ -156,6 +153,28 @@ Each monster gets full HP (from the template's max HP), auto-rolled initiative, 
 
 **Naming**: Monsters are automatically numbered. If you already have Goblin 1-3 and add 2 more, the new ones become Goblin 4 and Goblin 5. If you have a single "Goblin" (no number) and add another, the existing one is renamed to "Goblin 1" and the new one becomes "Goblin 2".
 
+## Editing Monsters Mid-Combat
+
+Need to adjust a monster's stats during combat? Buffs, debuffs, Dispel Magic, or homebrew adjustments - you can edit any template field on in-flight monsters without changing the original template.
+
+### Single Monster Edit
+
+In any monster's expanded detail panel, click **Edit** (in the common controls at the bottom). This opens the override edit form for that one combatant.
+
+### Batch Edit
+
+For applying the same change to multiple monsters of the same type:
+
+1. Click **Edit Mode** in the combat bar
+2. Check the boxes on the monsters you want to edit (only same-template monsters can be selected together)
+3. Click **Edit Selected** to open the edit form
+4. Make your changes - modified fields are highlighted and show a revert button
+5. Click **Apply** to write the changes, or **Cancel** to discard
+
+Overrides are shown on combatant rows with a visual badge, and all overridden values are highlighted in the detail panel. The original template is never modified.
+
+For the full details on overrides, conflict handling, and what can/cannot be changed, see [Combat Deep Dive](COMBAT_DEEP_DIVE.md).
+
 ## The Combat Loop
 
 A typical turn looks like this:
@@ -163,9 +182,9 @@ A typical turn looks like this:
 1. **Next >>** to advance to the next combatant
 2. Expand their panel (if not already)
 3. Use the multiattack reminder to decide which attacks to make
-4. Click **Atk** (or **Adv** / **Dis**) for each attack roll
+4. Click **Atk** for each attack, then choose Disadvantage, Normal, or Advantage from the popup
 5. Check the roll log for hits and crits
-6. Click **Dmg** (or **Crit**) for attacks that hit
+6. Click **Dmg** for attacks that hit, then choose Normal or Crit from the popup
 7. Apply damage to targets by expanding their panel and using **Dmg**
 8. Handle any conditions, reactions, or legendary actions as needed
 9. **Next >>** to move on
