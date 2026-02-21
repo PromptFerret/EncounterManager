@@ -155,7 +155,7 @@ New field on monster template:
 
 Replaced browser `prompt()` dialogs with proper modals and added the ability to insert templated monsters into running combat.
 
-- **Add Combatant modal** (`showAddCombatantModal()`): Two modes - Ad-hoc (name + init) and Monster Template (searchable picker + qty). Toggle group switches between modes.
+- **Add Combatant modal** (`showAddCombatantModal()`): Three modes - Ad-hoc (name + init), Player (name, init, AC, notes), and Monster (searchable picker + qty). Toggle group switches between modes.
 - **`createMonsterCombatant(template, name)`**: Shared helper extracted from `launchCombat()`. Creates full monster combatant with rolled init and HP from `template.hpMax`.
 - **`getExistingMonsterCount(combat, templateId)`**: Counts existing combatants for retroactive numbering.
 - **Retroactive numbering**: When adding more of the same template, bare-named instances get renamed (e.g., "Goblin" becomes "Goblin 1" when "Goblin 2" is added).
