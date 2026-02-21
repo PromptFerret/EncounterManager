@@ -41,7 +41,7 @@ D&D encounter manager and initiative tracker for DMs running combat. Build monst
 
 ## Example Data
 
-Download [mythborne-monsters.squishtext](https://github.com/PromptFerret/EncounterManager/blob/main/examples/mythborne-monsters.squishtext) and import it via **Load Backup** to see the tool in action — includes 3 monster templates, a party, an encounter, and an active combat ready to play.
+Download [mythborne-chronicles.squishtext](https://github.com/PromptFerret/EncounterManager/blob/main/examples/mythborne-chronicles.squishtext) and import it via **Load Backup** to see the tool in action — includes 3 monster templates, a party, an encounter, and an active combat ready to play.
 
 Individual monsters for **Import Monster**:
 - [minotaur.squishtext](https://github.com/PromptFerret/EncounterManager/blob/main/examples/minotaur.squishtext) — CR 3 Large bruiser with Charge, Gore, and Reckless
