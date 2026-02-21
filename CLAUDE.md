@@ -270,7 +270,10 @@ User input flows through `this.value` in onchange handlers (reads from DOM eleme
 - **Phase 4** (done): Multi-combat support (combats array + combat list selector UI with player names), SquishText import/export (.squishtext format, smart merge by ID, per-monster export/import with multiselect), searchable monster picker in encounter form, storage indicator in footer (auto-scales B/KB/MB/GB, shows quota)
 - **Phase 4.1** (done): Per-party player lists (removed shared roster), toolbar UX (Save Backup/Load Backup/Import Monster), direct file picker for Load Backup (no modal)
 - **Phase 4.2** (done): Combat reinforcements - replaced browser `prompt()` with proper modal for adding combatants (three modes: ad-hoc, player, or templated monsters with full stat blocks). Searchable monster picker in modal (separate DOM IDs from encounter form picker). Retroactive numbering when adding more of the same template. Replaced custom condition `prompt()` with inline text input. Extracted `createMonsterCombatant()` helper from `launchCombat()`.
-- **Phase 5+** (future): External importers - 5etools, CritterDB, Bestiary Builder (each in own phase for discovery/mapping). See `PLAN.md` for backlog.
+- **Phase 4.3** (done): View persistence - active tab saved to `state.preferences` in IndexedDB, restored on load. Included in backup export/import.
+- **Phase 4.4** (next): Cleanup & active combatant UX - remove dead `groups` field, audit for other artifacts, auto-expand active combatant panel (prevent collapse during turn).
+- **Phase 5** (future): Combat overrides - in-combat monster editing with sparse delta overrides (`deepMerge` + `sparseOverrides`). Single edit, batch edit mode with checkbox selection (same-template only), per-field reset, visual indicators for overridden values. No adding/removing array elements.
+- **Phase 6+** (future): External importers - 5etools, CritterDB, Bestiary Builder (each in own phase). See `PLAN.md` for details.
 
 ## Development Notes
 

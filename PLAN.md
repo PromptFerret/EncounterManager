@@ -163,9 +163,148 @@ Replaced browser `prompt()` dialogs with proper modals and added the ability to 
 - **Custom condition inline input**: `toggleCustomCondInput()` shows/hides a text input when "Custom..." is selected in the condition dropdown. No more `prompt()`.
 - Deleted `addAdhocCombatant()`, replaced both call sites (init setup + combat bar) with `showAddCombatantModal()`.
 
+## Phase 4.3 - View Persistence (done)
+
+- Active tab saved to `state.preferences` in IndexedDB on every tab switch
+- On page load, restores the saved view instead of defaulting to Monsters
+- Added `preferences` key to `STORAGE_KEYS` and `state`
+- Preferences included in backup exports and restored on import
+- Valid views validated against whitelist: `templates`, `parties`, `encounters`, `combat`
+
+## Phase 4.4 - Cleanup & Active Combatant UX
+
+### Dead Code Cleanup
+
+Remove leftover artifacts that are no longer needed:
+
+- **`groups`**: Dead field from pre-search monster grouping concept. Exists in `STORAGE_KEYS`, `state`, and `newTemplate()` but never read or rendered. Remove all three references and the `pf_enc_groups` IndexedDB key.
+- **Audit for other dead fields/functions**: Scan for any other unused state keys, template fields, or functions that accumulated during development.
+
+### Active Combatant Auto-Expand
+
+The active combatant's detail panel is always expanded during their turn.
+
+- When **Next >>** advances to a new combatant, their panel auto-expands if collapsed
+- The active combatant's panel **cannot be collapsed** during their turn (disable the collapse toggle for `combat.combatants[combat.turn]`)
+- When the turn advances past them, the panel collapses back (unless it was manually expanded before their turn)
+- Previous turn's panel: if it was already expanded before auto-expand, leave it open. If it was auto-expanded, collapse it on turn advance.
+- Track with a transient `autoExpandedId` variable (not persisted). Set when auto-expanding a previously-collapsed panel. Cleared on turn advance after collapsing.
+
+## Phase 5 - Combat Overrides (In-Combat Monster Editing)
+
+Edit any template field on in-flight monster combatants without modifying the original template. Supports single and batch editing with sparse delta overrides.
+
+### Core: Sparse Override System
+
+Combatants already have an `overrides` object and a `resolveField(c, field)` helper that checks `c.overrides[field]` before falling back to the template. This is already used for `ac` and `hpMax` in combat rendering. Phase 5 extends this to handle nested objects and arrays via `deepMerge`, replacing the flat field-by-field resolution with a full recursive merge.
+
+#### `deepMerge(template, overrides)`
+
+Recursive merge producing a complete template-shaped object:
+- Simple fields (string, number, boolean): override wins if present
+- Objects (abilities, etc.): recursive merge
+- Arrays (attacks, features, saves, skills, legendaryActions): merge by index. If `overrides[i]` is null/undefined, use `template[i]`. If `overrides[i]` exists, deep merge `template[i]` with `overrides[i]`. Override arrays are always same length or shorter than template arrays (no adding/removing elements).
+
+#### `sparseOverrides(template, edited)`
+
+Produces a sparse override object by diffing an edited copy against the template:
+- Simple fields: include only if value differs from template
+- Objects: recurse, include only sub-keys that differ
+- Arrays: compare by index, include only indices where values differ (null for unchanged indices). Omit array entirely if no indices changed.
+
+~15-20 lines of vanilla JS. No external dependencies.
+
+#### Integration Point
+
+One change at each template lookup in combat rendering:
+
+```js
+// Before:
+var template = state.templates.find(t => t.id === c.templateId);
+
+// After:
+var template = deepMerge(
+  state.templates.find(t => t.id === c.templateId),
+  c.overrides || {}
+);
+```
+
+All downstream reads (`template.ac`, `template.attacks`, etc.) automatically get overridden values. No other combat rendering code changes needed.
+
+#### What Overrides Cover
+
+All template fields are editable: name, size, type, alignment, ac, acNote, hpMax, speed, cr, abilities, savingThrows, skills, damage resistances/immunities/vulnerabilities, condition immunities, senses, languages, passivePerception, multiattack, critRange, attacks (name, bonus, note, damages), features (name, desc, recharge, usesMax), legendaryActionBudget, legendaryActions (name, cost, desc), legendaryResistances, tactics.
+
+#### What Overrides Do NOT Cover
+
+Instance state stays on the combatant directly (not in overrides): `currentHp`, `tempHp`, `conditions`, `concentration`, `legendaryActionsRemaining`, `legendaryResistancesRemaining`, `featureUses`, `rollLog`, `notes`, `reactionUsed`, `isDead`. These are combat-instance state, not template-field changes.
+
+#### Constraints
+
+- **No adding array elements**: Cannot add new attacks, features, or legendary actions via overrides. Use the combatant notes field for temporary additions. This keeps array indices stable and avoids index collision with template edits.
+- **No removing array elements**: Cannot remove template-defined attacks/features/legendary actions. Only values within existing elements can be changed. Notes field for narrative removals ("Lost bite - teeth punched out by barb").
+- **HP interaction**: Overriding `hpMax` does not auto-adjust `currentHp`. The DM heals/damages separately via the combat screen. If `currentHp` ends up above the new `hpMax`, the HP bar shows it - the DM adjusts manually.
+- **Backward compatibility**: Old combats without `overrides` work naturally: `deepMerge(template, c.overrides || {})` with empty overrides returns the template unchanged. No migration needed.
+
+### Batch Edit Mode (Core Feature)
+
+The primary editing interface. All editing flows through this system, whether one monster or fifty.
+
+#### UX Flow
+
+1. Click **Edit Mode** in the combat bar (toggle button)
+2. Checkboxes appear on each monster row
+3. First selection locks to that template - only same-template monsters remain selectable, others grey out
+4. Select desired combatants
+5. Click **Edit Selected** - opens the template form
+6. Form is pre-populated with **effective values** (template merged with existing overrides)
+7. Overridden fields are visually highlighted (colored border or background tint)
+8. A **reset icon** appears next to each overridden field/section - click to revert that field to template value
+9. Make changes, click **Apply** - `sparseOverrides(rawTemplate, formData)` produces the override, written to all selected combatants
+10. If a field is changed back to the template value, it is excluded from overrides (effectively a reset)
+11. The form needs both the raw template (for diffing and reset) and the merged copy (for display)
+12. Cancel discards changes, exit edit mode returns to normal combat
+
+#### Reset Flow (same workflow)
+
+1. Enter Edit Mode, select the 10 goblins hit by Dispel Magic
+2. Click Edit Selected
+3. Reset the fields that were dispelled
+4. Apply - overrides removed from those combatants for those fields
+
+#### Conflicting Overrides in Batch
+
+When selected combatants have different override values for the same field:
+- Fields where all selected agree (same override or all unoverridden): **editable**, show the value
+- Fields where selected disagree (different override values): **disabled**, show "varies" label
+- Reset also disabled for conflicting fields (handle those individually)
+
+### Single Monster Edit (Shortcut)
+
+An **Edit** button on the monster's expanded detail panel. This is a shortcut that enters Edit Mode with that one combatant pre-selected and opens the form immediately. Same code path as batch edit - single edit is just a one-combatant batch edit.
+
+### Visual Indicators
+
+#### Initiative List Row
+
+Combatants with active overrides show a visual indicator (badge or pip) on their row so the DM can see at a glance which monsters have been modified.
+
+#### Detail Panel
+
+Overridden values are highlighted wherever they appear in the detail panel - AC, abilities, attack bonuses, damage dice, feature descriptions, etc. The highlighting matches the edit form styling so the DM sees the same visual language inside and outside the editor.
+
+### Implementation Order
+
+1. `deepMerge()` and `sparseOverrides()` utility functions
+2. Insert merge at template lookup points in combat rendering, replacing `resolveField()` usage (verify all fields resolve correctly)
+3. Batch edit mode: Edit Mode toggle, checkboxes, template filter, form in combat-override mode, save/reset logic, batch apply
+4. Conflicting-field detection for batch edit
+5. Single edit shortcut: Edit button on monster panel, pre-selects and opens batch edit for one combatant
+6. Visual indicators on rows and detail panel
+
 ## Future Phases
 
-### Phase 5 - 5etools Importer
+### Phase 6 - 5etools Importer
 
 #### Importer Architecture Pattern (applies to all future importers)
 
@@ -432,13 +571,13 @@ Detection and parsing:
 - `initiative.advantageMode: "adv"` → set `initAdvantage: true`
 - `initiative` as plain number → use as flat init bonus directly
 
-### Phase 6 - CritterDB Importer
+### Phase 7 - CritterDB Importer
 - Discovery: investigate CritterDB JSON export format
 - Data mapping: map CritterDB fields to canonical template schema
 - Pure function: `importCritterDB(json) → template[]`
 - UI: integrate into Import Monster modal
 
-### Phase 7 - Bestiary Builder Importer
+### Phase 8 - Bestiary Builder Importer
 - Discovery: investigate Bestiary Builder JSON export format
 - Data mapping: map fields to canonical template schema
 - Pure function: `importBestiaryBuilder(json) → template[]`
@@ -446,14 +585,13 @@ Detection and parsing:
 ### Backlog (unscheduled)
 - Surprise round handling
 - Dynamic notes/riders with round expiry
-- Template override highlighting in combat
 - Damage log (collapsible panel)
 - Campaign/encounter filtering (dropdown or chips in encounter list)
 
 ## Key Architecture Decisions
 
 ### Sparse Delta Pattern
-Combat instances only store what differs from the template. Value resolution: `instance.overrides?.[field] ?? template[field]`. This keeps combat state small and allows template edits to propagate to future combats.
+Combat instances only store what differs from the template. Currently uses `resolveField(c, field)` for flat fields (`ac`, `hpMax`). Phase 5 extends this to `deepMerge(template, c.overrides || {})` for nested objects and arrays. Overrides mirror the template structure but only contain changed values. This keeps combat state small and allows template edits to propagate to non-overridden fields.
 
 ### Single-File, No Dependencies
 Same as all PromptFerret tools. All CSS and JS inline in `index.html`. Works from `file://` and GitHub Pages. No build step.
