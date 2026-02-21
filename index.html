@@ -2233,7 +2233,7 @@ function showAddCombatantModal() {
     // Ad-hoc mode (default)
     '<div style="display:flex;flex-direction:column;gap:0.5rem">' +
     '<label style="font-size:0.75rem;color:var(--text-muted)">Name</label>' +
-    '<input type="text" id="addCombatantName" placeholder="Lair Action, Reinforcements..." onclick="event.stopPropagation()" style="padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem">' +
+    '<input type="text" id="addCombatantName" placeholder="Lair Actions, Environmental, Traps..." onclick="event.stopPropagation()" style="padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem">' +
     '<label style="font-size:0.75rem;color:var(--text-muted)">Initiative</label>' +
     '<input type="number" id="addCombatantInit" value="' + defaultInit + '" step="0.01" placeholder="Init" onclick="event.stopPropagation()" style="width:80px;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem;font-family:var(--mono)">' +
     '</div>' +
@@ -2264,7 +2264,7 @@ function switchAddMode(mode) {
     body.innerHTML =
       '<div style="display:flex;flex-direction:column;gap:0.5rem">' +
       '<label style="font-size:0.75rem;color:var(--text-muted)">Name</label>' +
-      '<input type="text" id="addCombatantName" placeholder="Lair Action, Reinforcements..." onclick="event.stopPropagation()" style="' + inputStyle + '">' +
+      '<input type="text" id="addCombatantName" placeholder="Lair Actions, Environmental, Traps..." onclick="event.stopPropagation()" style="' + inputStyle + '">' +
       '<label style="font-size:0.75rem;color:var(--text-muted)">Initiative</label>' +
       '<input type="number" id="addCombatantInit" value="' + defaultInit + '" step="0.01" placeholder="Init" onclick="event.stopPropagation()" style="width:80px;' + monoStyle + '">' +
       '</div>';
