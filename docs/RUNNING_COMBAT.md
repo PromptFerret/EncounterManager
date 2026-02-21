@@ -18,10 +18,7 @@ The initiative setup screen lists all combatants - monsters first, then players.
 
 **Players** have blank initiative fields. Enter each player's initiative roll.
 
-You can also click **+ Add** to add more combatants. A modal offers three options:
-- **Ad-hoc** - name and initiative for lair actions, environmental effects, or custom entries
-- **Player** - name, initiative, AC, and notes for a player joining mid-combat (e.g., split party reconvening)
-- **Monster** - search your monster library, set a quantity, and add full stat-block monsters with auto-rolled initiative
+You can also click **+ Add** to add more combatants. See [Adding Combatants Mid-Combat](#adding-combatants) below for details.
 
 When all players have initiative values, click **Begin Combat** to sort everyone by initiative (descending) and start Round 1.
 
@@ -32,7 +29,7 @@ When all players have initiative values, click **Begin Combat** to sort everyone
 - **Round N** badge showing the current round
 - **<< Prev** to go back one turn
 - **Next >>** to advance to the next turn (this is the button you will click most)
-- **+ Add** to add a combatant mid-combat
+- **+ Add** to add a combatant mid-combat (see [Adding Combatants](#adding-combatants) below)
 - **End Combat** to end and remove the combat
 
 ### The Initiative List
@@ -114,6 +111,42 @@ At the bottom of every expanded panel:
 - **Notes** - free-text DM notes, persisted across refreshes
 - **Kill** / **Revive** - toggle dead state (dead combatants are dimmed and struck through)
 - **Remove** - permanently remove from combat
+
+## Adding Combatants
+
+Click **+ Add** (available in both initiative setup and active combat) to open the Add Combatant modal. Three toggle buttons at the top select the mode:
+
+### Ad-hoc
+
+For entries with no stats - lair actions, environmental effects, traps, or any custom initiative entry.
+
+- **Name** - what this entry is called in the initiative list
+- **Initiative** - defaults to 20 in active combat, blank in initiative setup
+
+Creates a simple entry that tracks initiative, notes, and conditions. No HP, AC, or attacks.
+
+### Player
+
+For a player joining after combat started - split party reconvening, a late arrival, or re-adding a player who was removed.
+
+- **Name** - the player's name
+- **Initiative** - their rolled initiative (blank until entered)
+- **AC** - armor class (editable in their detail panel later too)
+- **Notes** - optional DM notes
+
+Creates a full player entry identical to players added at combat launch. Players added this way are not added to the party definition - the party is a template, combat is the instance.
+
+### Monster
+
+For reinforcements, summoned creatures, or late arrivals with full stat blocks.
+
+- **Monster** - searchable picker from your monster library (type to filter, click to select)
+- **Quantity** - how many to add (1-20, default 1)
+- **Init Override** - leave blank to auto-roll from the template's initiative bonus, or enter a value to use for all
+
+Each monster gets full HP (from the template's max HP), auto-rolled initiative, and the complete stat block - attacks, features, legendary actions, everything. They are identical to monsters added when launching combat.
+
+**Naming**: Monsters are automatically numbered. If you already have Goblin 1-3 and add 2 more, the new ones become Goblin 4 and Goblin 5. If you have a single "Goblin" (no number) and add another, the existing one is renamed to "Goblin 1" and the new one becomes "Goblin 2".
 
 ## The Combat Loop
 
