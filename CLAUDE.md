@@ -19,6 +19,7 @@ The `docs/` folder contains user-facing documentation rendered via MarkdownSite 
 | `docs/RUNNING_COMBAT.md` | Core combat loop - initiative, turns, HP, attacks |
 | `docs/COMBAT_DEEP_DIVE.md` | Conditions, concentration, legendaries, feature tracking |
 | `docs/IMPORT_EXPORT.md` | Backups, restoring, sharing, SquishText format |
+| `docs/MONSTER_FORMAT.md` | JSON schema reference for external monster creation |
 
 Docs are linked from the app footer and README. Update docs when features change.
 

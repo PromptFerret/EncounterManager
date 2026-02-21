@@ -54,7 +54,7 @@ Once you have the raw JSON, you can:
 - **Feed it to AI** - give the JSON structure to ChatGPT, Claude, or any AI to generate new monsters in the correct format, then compress and import
 - **Build tools** - write importers/exporters that integrate with other D&D tools
 
-The JSON structure matches what you see in the app. Monster templates, encounters, parties, and combats are all standard JSON objects.
+See the [Monster Format](MONSTER_FORMAT.md) reference for the complete field-by-field schema.
 
 ## Storage Details
 
