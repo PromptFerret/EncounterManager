@@ -11,8 +11,8 @@
     <meta name="author" content="PromptFerret">
 
     <!-- Open Graph -->
-    <meta property="og:title" content="EncounterManager — D&D Initiative & Combat Tracker">
-    <meta property="og:description" content="Build encounters, roll initiative, and track combat. No server, no accounts — runs in your browser.">
+    <meta property="og:title" content="EncounterManager - D&D Initiative & Combat Tracker">
+    <meta property="og:description" content="Build encounters, roll initiative, and track combat. No server, no accounts - runs in your browser.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://promptferret.github.io/EncounterManager/">
 
@@ -798,7 +798,7 @@ let formMode = null;   // null = list, 'template' = editing template, 'encounter
 let formData = null;   // working copy of the item being edited
 let savedFormSnapshot = null; // snapshot of formData at last save, for dirty checking
 let searchQuery = '';
-let activeCombatId = null; // transient — ID of the combat currently being viewed
+let activeCombatId = null; // transient - ID of the combat currently being viewed
 
 function getActiveCombat() {
   if (!activeCombatId) return null;
@@ -928,7 +928,7 @@ async function load() {
       } catch (e) { /* best effort */ }
       console.log('Migrated single combat to combats array');
     }
-    // Clean up old shared player roster key (Phase 4.1 — players now per-party)
+    // Clean up old shared player roster key (Phase 4.1 - players now per-party)
     try {
       const tx2 = _db.transaction(DB_STORE, 'readwrite');
       tx2.objectStore(DB_STORE).delete('pf_enc_players');
@@ -997,7 +997,7 @@ function save(key) {
       }
     } catch (e) {
       console.error('Failed to save state:', e);
-      setStatus('Failed to save — storage may be full.', 'error');
+      setStatus('Failed to save - storage may be full.', 'error');
     }
     return;
   }
@@ -1110,7 +1110,7 @@ async function decompress(base64) {
   if (dotIdx > 0 && base64.length - dotIdx - 1 === 8) {
     const data = base64.slice(0, dotIdx);
     const checksum = base64.slice(dotIdx + 1).toLowerCase();
-    if (crc32(data) !== checksum) throw new Error('Checksum mismatch — data may be corrupted.');
+    if (crc32(data) !== checksum) throw new Error('Checksum mismatch - data may be corrupted.');
     base64 = data;
   }
   while (base64.length % 4 !== 0) base64 += '=';
@@ -1683,7 +1683,7 @@ function addMonsterToEncounter() {
   if (!templateId) { setStatus('Select a monster first.', 'warning'); return; }
   const qty = Math.max(1, parseInt(qtyInput.value) || 1);
 
-  // Check if already added — increment qty instead
+  // Check if already added - increment qty instead
   const existing = formData.monsters.find(m => m.templateId === templateId);
   if (existing) {
     existing.qty += qty;
@@ -1973,7 +1973,7 @@ function renderCombatList(el) {
   html += '<div class="form-section-title">Active Combats</div>';
   state.combats.forEach(combat => {
     const enc = state.encounters.find(e => e.id === combat.encounterId);
-    const currentName = combat.combatants[combat.turnIndex] ? combat.combatants[combat.turnIndex].name : '—';
+    const currentName = combat.combatants[combat.turnIndex] ? combat.combatants[combat.turnIndex].name : '-';
     const alive = combat.combatants.filter(c => !c.dead).length;
     html += '<div class="combat-list-card" onclick="resumeCombat(\'' + combat.id + '\')">';
     html += '<div class="combat-list-name">' + esc(combat.name || (enc ? enc.name : 'Combat')) + '</div>';
@@ -2098,7 +2098,7 @@ function launchCombat(partyId) {
 
   const newCombat = {
     id: uuid(),
-    name: enc.name + ' \u2014 ' + party.name,
+    name: enc.name + ' - ' + party.name,
     encounterId: enc.id,
     partyId: party.id,
     round: 0,
@@ -2198,7 +2198,7 @@ function beginCombat() {
   combat.turnIndex = 0;
   combat.combatants.forEach(c => { c.reactionUsed = false; });
   saveCombat();
-  setStatus('Round 1 — ' + combat.combatants[0].name + '\'s turn', 'success');
+  setStatus('Round 1 - ' + combat.combatants[0].name + '\'s turn', 'success');
   render();
 }
 
@@ -2245,7 +2245,7 @@ function renderActiveCombat(el) {
     html += '<div class="' + rowClasses + '" onclick="toggleCombatantDetail(' + idx + ')">';
 
     // Init
-    html += '<span class="init-val">' + (c.init !== null && c.init !== undefined ? Math.floor(c.init) : '–') + '</span>';
+    html += '<span class="init-val">' + (c.init !== null && c.init !== undefined ? Math.floor(c.init) : '-') + '</span>';
 
     // Name + badges
     html += '<span class="combatant-name type-' + c.type + '">' + esc(c.name);
@@ -2482,7 +2482,7 @@ function renderCombatantDetail(c, idx, template) {
     html += '<div><div class="detail-section-title">Player</div>';
     html += '<div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.3rem">';
     html += '<label style="font-size:0.75rem;color:var(--text-muted)">AC</label>';
-    html += '<input type="number" value="' + (c.ac || '') + '" style="width:60px;padding:0.25rem 0.4rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:0.78rem;text-align:center" onchange="event.stopPropagation();setPlayerAc(' + idx + ',+this.value)" onclick="event.stopPropagation()" placeholder="—">';
+    html += '<input type="number" value="' + (c.ac || '') + '" style="width:60px;padding:0.25rem 0.4rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:0.78rem;text-align:center" onchange="event.stopPropagation();setPlayerAc(' + idx + ',+this.value)" onclick="event.stopPropagation()" placeholder="-">';
     html += '</div>';
     html += '<div style="font-size:0.78rem;color:var(--text-muted)">Conditions and details tracked by the DM.</div>';
     html += '</div><div></div>';
@@ -2740,7 +2740,7 @@ function applyTempHp(idx) {
   const val = Math.max(0, parseInt(input.value) || 0);
   if (val === 0) return;
   const c = getActiveCombat().combatants[idx];
-  // THP doesn't stack — take the higher value
+  // THP doesn't stack - take the higher value
   c.tempHp = Math.max(c.tempHp || 0, val);
   setStatus(c.name + ' gains ' + val + ' temp HP', 'success');
   saveCombat();
@@ -2793,10 +2793,10 @@ function rollRecharge(combatantIdx, featureIdx) {
   if (!c.featureUses) c.featureUses = {};
   if (result.total >= threshold) {
     c.featureUses[featureIdx] = f.usesMax || 1;
-    c.rollLog.push({ label: 'Recharge: ' + esc(f.name), text: 'Rolled ' + result.total + ' (need ' + threshold + '+) — Recharged!', cssClass: 'crit' });
+    c.rollLog.push({ label: 'Recharge: ' + esc(f.name), text: 'Rolled ' + result.total + ' (need ' + threshold + '+) - Recharged!', cssClass: 'crit' });
     setStatus(f.name + ' recharged!', 'success');
   } else {
-    c.rollLog.push({ label: 'Recharge: ' + esc(f.name), text: 'Rolled ' + result.total + ' (need ' + threshold + '+) — No recharge', cssClass: 'fumble' });
+    c.rollLog.push({ label: 'Recharge: ' + esc(f.name), text: 'Rolled ' + result.total + ' (need ' + threshold + '+) - No recharge', cssClass: 'fumble' });
     setStatus(f.name + ' did not recharge', 'warning');
   }
   saveCombat();
@@ -2817,7 +2817,7 @@ function useLegendaryAction(combatantIdx, laIdx) {
   if (c.legendaryActionsRemaining < la.cost) return;
   c.legendaryActionsRemaining -= la.cost;
   if (!c.rollLog) c.rollLog = [];
-  c.rollLog.push({ label: 'Legendary Action', text: esc(la.name) + ' (cost ' + la.cost + ') — LA ' + c.legendaryActionsRemaining + '/' + template.legendaryActionBudget + ' remaining', cssClass: '' });
+  c.rollLog.push({ label: 'Legendary Action', text: esc(la.name) + ' (cost ' + la.cost + ') - LA ' + c.legendaryActionsRemaining + '/' + template.legendaryActionBudget + ' remaining', cssClass: '' });
   setStatus(c.name + ': ' + la.name + ' (LA ' + c.legendaryActionsRemaining + '/' + template.legendaryActionBudget + ')', 'success');
   saveCombat();
   render();
@@ -2831,7 +2831,7 @@ function useLegendaryResistance(combatantIdx) {
   if (c.legendaryResistancesRemaining <= 0) return;
   c.legendaryResistancesRemaining--;
   if (!c.rollLog) c.rollLog = [];
-  c.rollLog.push({ label: 'Legendary Resistance', text: 'Used — LR ' + c.legendaryResistancesRemaining + '/' + template.legendaryResistances + ' remaining', cssClass: '' });
+  c.rollLog.push({ label: 'Legendary Resistance', text: 'Used - LR ' + c.legendaryResistancesRemaining + '/' + template.legendaryResistances + ' remaining', cssClass: '' });
   setStatus(c.name + ' uses Legendary Resistance (LR ' + c.legendaryResistancesRemaining + '/' + template.legendaryResistances + ')', 'warning');
   saveCombat();
   render();
@@ -2912,7 +2912,7 @@ function rollAttack(combatantIdx, attackIdx, mode) {
   const critThreshold = template.critRange || 20;
   const isCrit = d20 >= critThreshold;
   const critClass = isCrit ? 'crit' : d20 === 1 ? 'fumble' : '';
-  const critLabel = isCrit ? ' — NAT 20!' : d20 === 1 ? ' — NAT 1' : '';
+  const critLabel = isCrit ? ' - NAT 20!' : d20 === 1 ? ' - NAT 1' : '';
   const modeLabel = mode === 'advantage' ? ' (Adv)' : mode === 'disadvantage' ? ' (Dis)' : '';
 
   c.rollLog.push({
@@ -2990,7 +2990,7 @@ function applyTurnStartEffects(idx) {
       if (f.recharge && f.usesMax) {
         const remaining = c.featureUses && c.featureUses[fIdx] !== undefined ? c.featureUses[fIdx] : f.usesMax;
         if (remaining === 0) {
-          c.rollLog.push({ label: 'Recharge Available', text: esc(f.name) + ' — open detail panel to Roll Recharge', cssClass: '' });
+          c.rollLog.push({ label: 'Recharge Available', text: esc(f.name) + ' - open detail panel to Roll Recharge', cssClass: '' });
         }
       }
     });
@@ -3010,9 +3010,9 @@ function applyTurnStartEffects(idx) {
           c.rollLog.push({ label: 'Condition Expired', text: cond.name + ' has worn off', cssClass: '' });
           return false;
         }
-        c.rollLog.push({ label: 'Condition', text: cond.name + ' — ' + cond.duration + ' round' + (cond.duration !== 1 ? 's' : '') + ' remaining', cssClass: '' });
+        c.rollLog.push({ label: 'Condition', text: cond.name + ' - ' + cond.duration + ' round' + (cond.duration !== 1 ? 's' : '') + ' remaining', cssClass: '' });
       } else if (cond.durationType === 'save') {
-        c.rollLog.push({ label: 'Save Needed', text: cond.name + ' — ' + cond.saveAbility.toUpperCase() + ' save DC ' + cond.saveDC, cssClass: '' });
+        c.rollLog.push({ label: 'Save Needed', text: cond.name + ' - ' + cond.saveAbility.toUpperCase() + ' save DC ' + cond.saveDC, cssClass: '' });
       }
       return true;
     });
@@ -3041,7 +3041,7 @@ function nextTurn() {
   combat.turnIndex = next;
   applyTurnStartEffects(next);
 
-  setStatus('Round ' + combat.round + ' — ' + combat.combatants[next].name + '\'s turn', 'success');
+  setStatus('Round ' + combat.round + ' - ' + combat.combatants[next].name + '\'s turn', 'success');
   saveCombat();
   render();
 }
@@ -3067,7 +3067,7 @@ function prevTurn() {
 
   combat.turnIndex = prev;
 
-  setStatus('Round ' + combat.round + ' — ' + combat.combatants[prev].name + '\'s turn', 'success');
+  setStatus('Round ' + combat.round + ' - ' + combat.combatants[prev].name + '\'s turn', 'success');
   saveCombat();
   render();
 }
@@ -3100,7 +3100,7 @@ function editInit(idx, value) {
     combat.combatants.sort((a, b) => (b.init ?? -Infinity) - (a.init ?? -Infinity));
     combat.turnIndex = combat.combatants.findIndex(c => c.id === nextId);
     if (combat.turnIndex < 0) combat.turnIndex = 0;
-    setStatus('Round ' + combat.round + ' — ' + combat.combatants[combat.turnIndex].name + '\'s turn', 'success');
+    setStatus('Round ' + combat.round + ' - ' + combat.combatants[combat.turnIndex].name + '\'s turn', 'success');
   } else {
     // Non-current combatant: re-sort, preserve current turn
     const currentId = combat.combatants[combat.turnIndex].id;
