@@ -836,7 +836,7 @@ let formData = null;   // working copy of the item being edited
 let savedFormSnapshot = null; // snapshot of formData at last save, for dirty checking
 let searchQuery = '';
 let activeCombatId = null; // ID of the combat currently being viewed (persisted in preferences)
-let autoExpandedId = null; // transient - combatant ID that was auto-expanded on turn start
+let autoExpandedId = null; // combatant ID that was auto-expanded on turn start (persisted in preferences)
 
 function getActiveCombat() {
   if (!activeCombatId) return null;
@@ -1172,6 +1172,7 @@ function saveCombat() {
   // Persist active combat ID so refreshes resume the same combat
   state.preferences = state.preferences || {};
   state.preferences.activeCombatId = activeCombatId;
+  state.preferences.autoExpandedId = autoExpandedId;
   save('preferences');
 }
 
@@ -2471,7 +2472,8 @@ function renderActiveCombat(el) {
     html += '<button class="btn-sm" onclick="activeCombatId=null;saveCombat();render()" title="Back to combat list">&laquo; List</button>';
   }
   html += '<span class="round-badge">Round ' + combat.round + '</span>';
-  html += '<button class="btn-sm" onclick="prevTurn()">&laquo; Prev</button>';
+  var atStart = combat.round === 1 && combat.turnIndex === 0;
+  html += '<button class="btn-sm" onclick="prevTurn()"' + (atStart ? ' disabled style="opacity:0.4"' : '') + '>&laquo; Prev</button>';
   html += '<button class="btn-sm btn-action" onclick="nextTurn()">Next &raquo;</button>';
   html += '<div class="spacer"></div>';
   html += '<button class="btn-sm" onclick="showAddCombatantModal()">+ Add</button>';
@@ -3695,6 +3697,7 @@ load().then(() => {
   // Restore active combat ID before switchView (which would clear it)
   if (savedView === 'combat' && savedCombatId && state.combats.find(function(c) { return c.id === savedCombatId; })) {
     activeCombatId = savedCombatId;
+    autoExpandedId = state.preferences.autoExpandedId || null;
   }
   if (savedView && ['templates', 'parties', 'encounters', 'combat'].includes(savedView)) {
     switchView(savedView);
