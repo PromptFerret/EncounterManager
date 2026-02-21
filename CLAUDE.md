@@ -25,7 +25,7 @@ Docs are linked from the app footer and README. Update docs when features change
 
 ## Code Map
 
-The file is ~3300+ lines. Rough section layout:
+The file is ~3700+ lines. Rough section layout:
 
 | Section | Contents |
 |---------|----------|
@@ -42,7 +42,7 @@ The file is ~3300+ lines. Rough section layout:
 | Combat Entry | `startCombat()`, party select cards, `launchCombat()` |
 | Combat List | `renderCombatList()`, `resumeCombat()` - multi-combat selector |
 | Initiative Setup | `renderInitiativeSetup()`, `beginCombat()` |
-| Active Combat | `renderActiveCombat()`, `renderCombatantDetail()` (with conditions, concentration, legendary sections), `showAddCombatantModal()` / `doAddCombatant()` |
+| Active Combat | `renderActiveCombat()`, `renderCombatantDetail()` (with conditions, concentration, legendary sections, collapsible "Tactics & Descriptions" accordion with Copy buttons), `showAddCombatantModal()` / `doAddCombatant()` |
 | Condition Tracking | `updateConditionFields()`, `toggleCustomCondInput()`, `addCondition()`, `removeCondition()` |
 | Concentration | `setConcentration()`, `dropConcentration()` |
 | HP Tracking | `applyDamage()` (with concentration DC warning), `applyHeal()`, `applyTempHp()` |
