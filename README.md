@@ -1,4 +1,4 @@
-# Encounter Manager
+# EncounterManager
 
 D&D encounter manager and initiative tracker for DMs running combat. Build monster templates, organize parties, construct encounters, and run combat — all in the browser with IndexedDB persistence. No server, no accounts, no dependencies.
 

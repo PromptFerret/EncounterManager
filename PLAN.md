@@ -1,4 +1,4 @@
-# Encounter Manager — Implementation Plan
+# EncounterManager — Implementation Plan
 
 ## Overview
 

@@ -1,4 +1,4 @@
-# Encounter Manager
+# EncounterManager
 
 ## What This Is
 A single self-contained HTML file (`index.html`) for D&D encounter management and initiative tracking. DMs build monster templates, organize parties, construct encounters, and run combat — all in the browser with IndexedDB persistence (auto-migrates from localStorage, falls back to localStorage if IndexedDB unavailable). No server, no accounts, no dependencies.
