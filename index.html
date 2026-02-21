@@ -417,6 +417,21 @@
     border-radius: var(--radius); padding: 1.5rem;
     max-width: 400px; width: 90%;
   }
+  .modal-wide { max-width: 480px; }
+  .modal-toggle-group {
+    display: flex; gap: 0; margin-bottom: 1rem;
+  }
+  .modal-toggle-group button {
+    flex: 1; padding: 0.4rem 0.6rem; font-size: 0.78rem; font-weight: 600;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text-muted);
+    cursor: pointer; transition: background 0.15s, color 0.15s;
+  }
+  .modal-toggle-group button:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  .modal-toggle-group button:last-child { border-radius: 0 var(--radius) var(--radius) 0; border-left: none; }
+  .modal-toggle-group button.active {
+    background: var(--accent); color: white; border-color: var(--accent);
+  }
+  .modal-toggle-group button:not(.active):hover { background: var(--surface2); }
 
   /* ── Footer ── */
   .footer {
@@ -2043,6 +2058,25 @@ function renderCombatPartySelect() {
   return html;
 }
 
+function createMonsterCombatant(template, name) {
+  const bonus = template.initBonus || 0;
+  const notation = '1d20' + (bonus >= 0 ? '+' + bonus : String(bonus));
+  const initRoll = rollDice(notation, { advantage: template.initAdvantage });
+  return {
+    id: uuid(),
+    templateId: template.id,
+    name: name,
+    type: 'monster',
+    init: initRoll.total,
+    initRollText: initRoll.text,
+    currentHp: template.hpMax
+  };
+}
+
+function getExistingMonsterCount(combat, templateId) {
+  return combat.combatants.filter(c => c.templateId === templateId).length;
+}
+
 function launchCombat(partyId) {
   const party = state.parties.find(p => p.id === partyId);
   const enc = state.encounters.find(e => e.id === pendingCombatEncounterId);
@@ -2068,21 +2102,7 @@ function launchCombat(partyId) {
       templateCounters[m.templateId]++;
       const num = templateCounters[m.templateId];
       const name = total > 1 ? template.name + ' ' + num : template.name;
-
-      const bonus = template.initBonus;
-      const notation = '1d20' + (bonus >= 0 ? '+' + bonus : String(bonus));
-      const initRoll = rollDice(notation, { advantage: template.initAdvantage });
-      const init = initRoll.total;
-
-      combatants.push({
-        id: uuid(),
-        templateId: template.id,
-        name: name,
-        type: 'monster',
-        init: init,
-        initRollText: initRoll.text,
-        currentHp: template.hpMax
-      });
+      combatants.push(createMonsterCombatant(template, name));
     }
   });
 
@@ -2148,7 +2168,7 @@ function renderInitiativeSetup(el) {
   });
 
   html += '<div style="margin-top:0.75rem;display:flex;gap:0.5rem">';
-  html += '<button class="btn-sm" onclick="addAdhocCombatant()">+ Add Combatant</button>';
+  html += '<button class="btn-sm" onclick="showAddCombatantModal()">+ Add Combatant</button>';
   html += '</div>';
 
   html += '<div class="form-actions">';
@@ -2165,17 +2185,164 @@ function setCombatantInit(idx, value) {
   saveCombat();
 }
 
-function addAdhocCombatant() {
-  const name = prompt('Combatant name (e.g., "Lair Action", "Reinforcements"):');
-  if (!name || !name.trim()) return;
+function filterCombatMonsterPicker(query) {
+  const dropdown = document.getElementById('combatMonsterPickerDropdown');
+  if (!dropdown) return;
+  const q = query.toLowerCase();
+  const matches = state.templates.filter(t => t.name.toLowerCase().includes(q));
+  if (matches.length === 0) {
+    dropdown.innerHTML = '<div class="search-dropdown-item" style="color:var(--text-dim);cursor:default">No matches</div>';
+  } else {
+    dropdown.innerHTML = matches.map(t =>
+      '<div class="search-dropdown-item" onmousedown="selectCombatMonster(\'' + t.id + '\')">'
+      + esc(t.name) + '<span class="cr-tag">CR ' + esc(t.cr || '?') + '</span></div>'
+    ).join('');
+  }
+  dropdown.classList.add('open');
+}
+
+function selectCombatMonster(templateId) {
+  const input = document.getElementById('combatMonsterPicker');
+  const dropdown = document.getElementById('combatMonsterPickerDropdown');
+  const t = state.templates.find(t => t.id === templateId);
+  if (!input || !t) return;
+  input.value = t.name;
+  input.dataset.templateId = templateId;
+  if (dropdown) dropdown.classList.remove('open');
+}
+
+function showAddCombatantModal() {
+  const existing = document.getElementById('addCombatantModal');
+  if (existing) existing.remove();
   const combat = getActiveCombat();
-  combat.combatants.push({
-    id: uuid(),
-    name: name.trim(),
-    type: 'adhoc',
-    init: 20.0,
-    notes: ''
-  });
+  const isActive = combat.round >= 1;
+  const defaultInit = isActive ? '20' : '';
+
+  const modal = document.createElement('div');
+  modal.id = 'addCombatantModal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = '<div class="modal-content modal-wide">' +
+    '<div class="form-section-title" style="margin-bottom:0.75rem">Add Combatant</div>' +
+    '<div class="modal-toggle-group">' +
+    '<button id="addModeAdhoc" class="active" onclick="switchAddMode(\'adhoc\')">Ad-hoc</button>' +
+    '<button id="addModeTemplate" onclick="switchAddMode(\'template\')">Monster Template</button>' +
+    '</div>' +
+    '<div id="addCombatantBody">' +
+    // Ad-hoc mode (default)
+    '<div style="display:flex;flex-direction:column;gap:0.5rem">' +
+    '<label style="font-size:0.75rem;color:var(--text-muted)">Name</label>' +
+    '<input type="text" id="addCombatantName" placeholder="Lair Action, Reinforcements..." onclick="event.stopPropagation()" style="padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem">' +
+    '<label style="font-size:0.75rem;color:var(--text-muted)">Initiative</label>' +
+    '<input type="number" id="addCombatantInit" value="' + defaultInit + '" step="0.01" placeholder="Init" onclick="event.stopPropagation()" style="width:80px;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem;font-family:var(--mono)">' +
+    '</div>' +
+    '</div>' +
+    '<div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:1rem">' +
+    '<button class="btn-sm" onclick="document.getElementById(\'addCombatantModal\').remove()">Cancel</button>' +
+    '<button class="btn-sm btn-action" onclick="doAddCombatant()">Add</button>' +
+    '</div></div>';
+  document.body.appendChild(modal);
+  setTimeout(function() { var el = document.getElementById('addCombatantName'); if (el) el.focus(); }, 50);
+}
+
+function switchAddMode(mode) {
+  const adhocBtn = document.getElementById('addModeAdhoc');
+  const templateBtn = document.getElementById('addModeTemplate');
+  const body = document.getElementById('addCombatantBody');
+  if (!body) return;
+  const combat = getActiveCombat();
+  const isActive = combat.round >= 1;
+  const defaultInit = isActive ? '20' : '';
+
+  if (mode === 'adhoc') {
+    adhocBtn.className = 'active';
+    templateBtn.className = '';
+    body.innerHTML =
+      '<div style="display:flex;flex-direction:column;gap:0.5rem">' +
+      '<label style="font-size:0.75rem;color:var(--text-muted)">Name</label>' +
+      '<input type="text" id="addCombatantName" placeholder="Lair Action, Reinforcements..." onclick="event.stopPropagation()" style="padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem">' +
+      '<label style="font-size:0.75rem;color:var(--text-muted)">Initiative</label>' +
+      '<input type="number" id="addCombatantInit" value="' + defaultInit + '" step="0.01" placeholder="Init" onclick="event.stopPropagation()" style="width:80px;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem;font-family:var(--mono)">' +
+      '</div>';
+    setTimeout(function() { var el = document.getElementById('addCombatantName'); if (el) el.focus(); }, 50);
+  } else {
+    adhocBtn.className = '';
+    templateBtn.className = 'active';
+    body.innerHTML =
+      '<div style="display:flex;flex-direction:column;gap:0.5rem">' +
+      '<label style="font-size:0.75rem;color:var(--text-muted)">Monster</label>' +
+      '<div class="search-select">' +
+      '<input type="text" id="combatMonsterPicker" placeholder="Search monsters..." autocomplete="off"' +
+      ' oninput="filterCombatMonsterPicker(this.value)" onfocus="filterCombatMonsterPicker(this.value)"' +
+      ' onclick="event.stopPropagation()"' +
+      ' style="width:100%;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem;box-sizing:border-box">' +
+      '<div id="combatMonsterPickerDropdown" class="search-dropdown"></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:0.75rem;align-items:flex-end">' +
+      '<div><label style="font-size:0.75rem;color:var(--text-muted)">Quantity</label>' +
+      '<input type="number" id="addCombatantQty" value="1" min="1" max="20" onclick="event.stopPropagation()" style="width:60px;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem;font-family:var(--mono);display:block"></div>' +
+      '<div><label style="font-size:0.75rem;color:var(--text-muted)">Init Override <span style="color:var(--text-dim)">(blank = roll)</span></label>' +
+      '<input type="number" id="addCombatantInit" step="0.01" placeholder="Auto" onclick="event.stopPropagation()" style="width:80px;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem;font-family:var(--mono);display:block"></div>' +
+      '</div>' +
+      '</div>';
+    setTimeout(function() { var el = document.getElementById('combatMonsterPicker'); if (el) el.focus(); }, 50);
+  }
+}
+
+function doAddCombatant() {
+  const combat = getActiveCombat();
+  const isTemplate = document.getElementById('addModeTemplate') && document.getElementById('addModeTemplate').className === 'active';
+
+  if (isTemplate) {
+    // Template monster path
+    const pickerEl = document.getElementById('combatMonsterPicker');
+    const templateId = pickerEl && pickerEl.dataset.templateId;
+    if (!templateId) { setStatus('Select a monster template.', 'error'); return; }
+    const template = state.templates.find(t => t.id === templateId);
+    if (!template) { setStatus('Template not found.', 'error'); return; }
+
+    const qtyEl = document.getElementById('addCombatantQty');
+    const qty = Math.max(1, Math.min(20, parseInt(qtyEl && qtyEl.value) || 1));
+    const initEl = document.getElementById('addCombatantInit');
+    const initOverride = initEl && initEl.value !== '' ? +initEl.value : null;
+
+    const existingCount = getExistingMonsterCount(combat, templateId);
+    const totalAfter = existingCount + qty;
+
+    // Retroactively number existing bare-name instances if adding more of the same
+    if (existingCount === 1 && totalAfter > 1) {
+      const existing = combat.combatants.find(c => c.templateId === templateId);
+      if (existing && existing.name === template.name) {
+        existing.name = template.name + ' 1';
+      }
+    }
+
+    const startNum = existingCount > 0 ? existingCount + 1 : (qty > 1 ? 1 : 0);
+    for (let i = 0; i < qty; i++) {
+      const num = startNum > 0 ? startNum + i : 0;
+      const name = num > 0 ? template.name + ' ' + num : template.name;
+      const c = createMonsterCombatant(template, name);
+      if (initOverride !== null) c.init = initOverride;
+      combat.combatants.push(c);
+    }
+    setStatus('Added ' + qty + 'x ' + template.name, 'success');
+  } else {
+    // Ad-hoc path
+    const nameEl = document.getElementById('addCombatantName');
+    const name = nameEl && nameEl.value.trim();
+    if (!name) { setStatus('Enter a combatant name.', 'error'); return; }
+    const initEl = document.getElementById('addCombatantInit');
+    const init = initEl && initEl.value !== '' ? +initEl.value : 20.0;
+    combat.combatants.push({
+      id: uuid(),
+      name: name,
+      type: 'adhoc',
+      init: init,
+      notes: ''
+    });
+    setStatus('Added: ' + name, 'success');
+  }
+
+  // Sort and preserve turn if active combat
   if (combat.round >= 1) {
     const currentId = combat.combatants[combat.turnIndex].id;
     combat.combatants.sort((a, b) => (b.init ?? -Infinity) - (a.init ?? -Infinity));
@@ -2183,6 +2350,8 @@ function addAdhocCombatant() {
     if (combat.turnIndex < 0) combat.turnIndex = 0;
   }
   saveCombat();
+  const modal = document.getElementById('addCombatantModal');
+  if (modal) modal.remove();
   render();
 }
 
@@ -2219,7 +2388,7 @@ function renderActiveCombat(el) {
   html += '<button class="btn-sm" onclick="prevTurn()">&laquo; Prev</button>';
   html += '<button class="btn-sm btn-action" onclick="nextTurn()">Next &raquo;</button>';
   html += '<div class="spacer"></div>';
-  html += '<button class="btn-sm" onclick="addAdhocCombatant()">+ Add</button>';
+  html += '<button class="btn-sm" onclick="showAddCombatantModal()">+ Add</button>';
   html += '<button class="btn-sm btn-danger" onclick="endCombat()">End Combat</button>';
   html += '</div>';
 
@@ -2529,10 +2698,11 @@ function renderCombatantDetail(c, idx, template) {
   }
   // Add condition form
   html += '<div style="display:flex;gap:0.3rem;align-items:flex-end;flex-wrap:wrap;font-size:0.72rem">';
-  html += '<select id="condName-' + idx + '" onclick="event.stopPropagation()" style="padding:0.25rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.72rem">';
+  html += '<select id="condName-' + idx + '" onclick="event.stopPropagation()" onchange="event.stopPropagation();toggleCustomCondInput(' + idx + ')" style="padding:0.25rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.72rem">';
   CONDITIONS.forEach(cn => { html += '<option value="' + cn + '">' + cn + '</option>'; });
   html += '<option value="__custom__">Custom...</option>';
   html += '</select>';
+  html += '<input type="text" id="condCustomName-' + idx + '" placeholder="Effect name" onclick="event.stopPropagation()" style="display:none;width:90px;padding:0.25rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.72rem">';
   html += '<select id="condType-' + idx + '" onclick="event.stopPropagation()" onchange="event.stopPropagation();updateConditionFields(' + idx + ')" style="padding:0.25rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.72rem">';
   html += '<option value="rounds">Rounds</option>';
   html += '<option value="save">Save-based</option>';
@@ -2584,6 +2754,19 @@ function setPlayerAc(idx, value) {
 // ── Condition Tracking ──
 // ═══════════════════════════════════════════════════════════════
 
+function toggleCustomCondInput(idx) {
+  const nameEl = document.getElementById('condName-' + idx);
+  const customEl = document.getElementById('condCustomName-' + idx);
+  if (!nameEl || !customEl) return;
+  if (nameEl.value === '__custom__') {
+    customEl.style.display = '';
+    customEl.focus();
+  } else {
+    customEl.style.display = 'none';
+    customEl.value = '';
+  }
+}
+
 function updateConditionFields(idx) {
   const typeEl = document.getElementById('condType-' + idx);
   const fieldsEl = document.getElementById('condFields-' + idx);
@@ -2609,9 +2792,9 @@ function addCondition(idx) {
 
   let name = nameEl.value;
   if (name === '__custom__') {
-    name = prompt('Custom condition/effect name:');
-    if (!name || !name.trim()) return;
-    name = name.trim();
+    const customEl = document.getElementById('condCustomName-' + idx);
+    name = customEl && customEl.value.trim();
+    if (!name) { setStatus('Enter a custom condition name.', 'error'); return; }
   }
 
   const durationType = typeEl.value;

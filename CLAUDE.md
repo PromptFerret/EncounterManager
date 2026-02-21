@@ -41,9 +41,9 @@ The file is ~3300+ lines. Rough section layout:
 | Parties | List, form, CRUD, per-party player list |
 | Combat Entry | `startCombat()`, party select cards, `launchCombat()` |
 | Combat List | `renderCombatList()`, `resumeCombat()` - multi-combat selector |
-| Initiative Setup | `renderInitiativeSetup()`, `beginCombat()`, `addAdhocCombatant()` |
-| Active Combat | `renderActiveCombat()`, `renderCombatantDetail()` (with conditions, concentration, legendary sections) |
-| Condition Tracking | `updateConditionFields()`, `addCondition()`, `removeCondition()` |
+| Initiative Setup | `renderInitiativeSetup()`, `beginCombat()` |
+| Active Combat | `renderActiveCombat()`, `renderCombatantDetail()` (with conditions, concentration, legendary sections), `showAddCombatantModal()` / `doAddCombatant()` |
+| Condition Tracking | `updateConditionFields()`, `toggleCustomCondInput()`, `addCondition()`, `removeCondition()` |
 | Concentration | `setConcentration()`, `dropConcentration()` |
 | HP Tracking | `applyDamage()` (with concentration DC warning), `applyHeal()`, `applyTempHp()` |
 | Feature Use Tracking | `useFeature()`, `restoreFeature()`, `rollRecharge()` |
@@ -269,6 +269,7 @@ User input flows through `this.value` in onchange handlers (reads from DOM eleme
 - **Phase 3.5** (done): IndexedDB migration (auto-migrates from localStorage, localStorage fallback), no-cache meta tags, init 0 display fix
 - **Phase 4** (done): Multi-combat support (combats array + combat list selector UI with player names), SquishText import/export (.squishtext format, smart merge by ID, per-monster export/import with multiselect), searchable monster picker in encounter form, storage indicator in footer (auto-scales B/KB/MB/GB, shows quota)
 - **Phase 4.1** (done): Per-party player lists (removed shared roster), toolbar UX (Save Backup/Load Backup/Import Monster), direct file picker for Load Backup (no modal)
+- **Phase 4.2** (done): Combat reinforcements - replaced browser `prompt()` with proper modal for adding combatants (ad-hoc or templated monsters with full stat blocks). Searchable monster picker in modal (separate DOM IDs from encounter form picker). Retroactive numbering when adding more of the same template. Replaced custom condition `prompt()` with inline text input. Extracted `createMonsterCombatant()` helper from `launchCombat()`.
 - **Phase 5+** (future): External importers - 5etools, CritterDB, Bestiary Builder (each in own phase for discovery/mapping). See `PLAN.md` for backlog.
 
 ## Development Notes
@@ -277,7 +278,10 @@ User input flows through `this.value` in onchange handlers (reads from DOM eleme
 - Feature and legendary action sections show column headers (`dyn-header`) only when rows exist
 - Attack damage rows are nested inside attack cards with a left border indent
 - Roll log uses `renderRollLog()` for live DOM updates without full re-render when rolling
-- Condition form uses `updateConditionFields()` for dynamic field switching based on duration type dropdown
+- Condition form uses `updateConditionFields()` for dynamic field switching based on duration type dropdown. Custom condition uses `toggleCustomCondInput()` for inline text input (no browser `prompt()`).
+- **Add Combatant modal**: `showAddCombatantModal()` renders a modal with two modes (Ad-hoc / Monster Template). `switchAddMode()` toggles between them. `doAddCombatant()` handles creation with retroactive numbering. Monster picker uses `filterCombatMonsterPicker()` / `selectCombatMonster()` with separate DOM IDs (`combatMonsterPicker` / `combatMonsterPickerDropdown`) to avoid collision with the encounter form picker.
+- **`createMonsterCombatant(template, name)`**: Shared helper extracted from `launchCombat()`. Creates a full monster combatant instance with rolled initiative and HP from `template.hpMax`. Used by both `launchCombat()` and `doAddCombatant()`.
+- **Retroactive numbering**: `getExistingMonsterCount()` counts existing combatants for a template. When adding more of the same, bare-named instances (e.g., "Goblin") get renamed to "Goblin 1" before new ones start at the next number.
 - `applyTurnStartEffects()` is the single consolidated turn-start hook - all turn-start additions go here, not in `nextTurn()` or `editInit()` directly
 - Recharge rolls are DM-initiated (notification + button), NOT auto-rolled on turn start
 - **Button classes**: Use `.btn-accent`, `.btn-success`, `.btn-warning`, `.btn-danger` for colored buttons - never inline `style="color:var(--accent)"` as it breaks hover contrast. Each class has proper `:hover` with `color: white !important`. `.btn-remove` is the global class for × delete/remove buttons (red border, red text, red bg on hover).

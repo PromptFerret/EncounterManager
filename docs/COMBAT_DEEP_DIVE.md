@@ -12,7 +12,7 @@ Conditions are tracked per-combatant and visible as colored chips on each row in
 
 At the bottom of any combatant's expanded panel, use the condition form:
 
-1. Select a **condition** from the dropdown: Blinded, Charmed, Deafened, Frightened, Grappled, Incapacitated, Invisible, Paralyzed, Petrified, Poisoned, Prone, Restrained, Stunned, Unconscious, or "Custom..." (which prompts for a custom name)
+1. Select a **condition** from the dropdown: Blinded, Charmed, Deafened, Frightened, Grappled, Incapacitated, Invisible, Paralyzed, Petrified, Poisoned, Prone, Restrained, Stunned, Unconscious, or "Custom..." (which shows an inline text input for the custom name)
 2. Select a **duration type**:
    - **Rounds** - lasts a set number of rounds. Enter the round count. Auto-decrements at the start of the combatant's turn and auto-removes when expired.
    - **Save-based** - lasts until a save is made. Select the save ability (STR/DEX/CON/INT/WIS/CHA) and set the DC. A reminder appears in the roll log at the start of the combatant's turn. The DM removes it manually when the save succeeds.

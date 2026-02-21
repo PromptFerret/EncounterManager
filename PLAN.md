@@ -151,39 +151,19 @@ New field on monster template:
 - Import migration: old backups with `players` array merge roster names into all parties
 - Storage cleanup: `pf_enc_players` key deleted from IndexedDB on load
 
+## Phase 4.2 - Combat Reinforcements & Modal Cleanup (done)
+
+Replaced browser `prompt()` dialogs with proper modals and added the ability to insert templated monsters into running combat.
+
+- **Add Combatant modal** (`showAddCombatantModal()`): Two modes - Ad-hoc (name + init) and Monster Template (searchable picker + qty). Toggle group switches between modes.
+- **`createMonsterCombatant(template, name)`**: Shared helper extracted from `launchCombat()`. Creates full monster combatant with rolled init and HP from `template.hpMax`.
+- **`getExistingMonsterCount(combat, templateId)`**: Counts existing combatants for retroactive numbering.
+- **Retroactive numbering**: When adding more of the same template, bare-named instances get renamed (e.g., "Goblin" becomes "Goblin 1" when "Goblin 2" is added).
+- **Combat monster picker**: `filterCombatMonsterPicker()` / `selectCombatMonster()` with separate DOM IDs from encounter form picker.
+- **Custom condition inline input**: `toggleCustomCondInput()` shows/hides a text input when "Custom..." is selected in the condition dropdown. No more `prompt()`.
+- Deleted `addAdhocCombatant()`, replaced both call sites (init setup + combat bar) with `showAddCombatantModal()`.
+
 ## Future Phases
-
-### Phase 4.2 - Combat Reinforcements & Modal Cleanup
-
-Replace browser `prompt()` dialogs with proper modals and add the ability to insert templated monsters into running combat.
-
-#### Add Combatant Modal
-The existing "+ Add" button in the combat bar and initiative setup currently uses `prompt()` for a name. Replace with a modal dialog offering two paths:
-
-1. **Ad-hoc combatant** (lair action, environment effect, reinforcement NPC)
-   - Name text input (replaces the browser prompt)
-   - Optional initiative input (defaults to 20 for active combat, blank for init setup)
-   - Creates the same type:'adhoc' combatant as today
-
-2. **Template monster** (reinforcements, summoned creatures, late arrivals)
-   - Searchable monster picker (reuse the `.search-select` pattern from the encounter form)
-   - Quantity input (1-20, default 1)
-   - Optional initiative input (pre-rolled from template like combat launch, but editable)
-   - For each monster: set currentHp from template.hpMax (not rolled - matches `launchCombat` behavior), roll initiative with template's initBonus/initAdvantage, create full type:'monster' combatant instance with templateId link
-   - Numbered names: scan existing combatants for the highest number already used for that template (e.g., if Goblin 1-3 exist, new goblins start at Goblin 4). Also retroactively number existing unnamed instances if adding more of the same type (e.g., one "Goblin" becomes "Goblin 1" when "Goblin 2" is added)
-
-#### Behavior
-- Modal replaces `prompt()` in both active combat ("+ Add" in combat bar) and initiative setup ("+ Add Combatant")
-- New combatants insert into initiative order sorted by their init value
-- If combat is active (round >= 1), new combatants get a turn in the current round if their init is ahead of the current turn; otherwise they join the next round's rotation naturally
-- Template monsters get full stat blocks, attacks, features, legendary actions - identical to monsters added via encounter launch
-
-#### Implementation
-- New `showAddCombatantModal()` function - renders modal HTML, handles both paths
-- Reuse `filterMonsterPicker()` / `selectMonster()` from encounter form (may need to generalize if currently tied to form DOM)
-- Reuse combatant creation logic from `launchCombat()` - extract into shared helper
-- Remove all `prompt()` calls from combat code
-- Also replace `prompt()` in the Custom condition flow (currently uses `prompt("Custom condition name:")`)
 
 ### Phase 5 - 5etools Importer
 
