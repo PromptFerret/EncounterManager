@@ -427,7 +427,8 @@
     cursor: pointer; transition: background 0.15s, color 0.15s;
   }
   .modal-toggle-group button:first-child { border-radius: var(--radius) 0 0 var(--radius); }
-  .modal-toggle-group button:last-child { border-radius: 0 var(--radius) var(--radius) 0; border-left: none; }
+  .modal-toggle-group button:not(:first-child) { border-left: none; }
+  .modal-toggle-group button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
   .modal-toggle-group button.active {
     background: var(--accent); color: white; border-color: var(--accent);
   }
@@ -2226,7 +2227,7 @@ function showAddCombatantModal() {
     '<div class="modal-toggle-group">' +
     '<button id="addModeAdhoc" class="active" onclick="switchAddMode(\'adhoc\')">Ad-hoc</button>' +
     '<button id="addModePlayer" onclick="switchAddMode(\'player\')">Player</button>' +
-    '<button id="addModeTemplate" onclick="switchAddMode(\'template\')">Monster Template</button>' +
+    '<button id="addModeTemplate" onclick="switchAddMode(\'template\')">Monster</button>' +
     '</div>' +
     '<div id="addCombatantBody">' +
     // Ad-hoc mode (default)
