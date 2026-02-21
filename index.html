@@ -2728,7 +2728,7 @@ function renderCombatantDetail(c, idx, template) {
     // Tactics
     if (template.tactics) {
       html += '<div class="detail-section-title" style="margin-top:0.5rem">Tactics</div>';
-      html += '<div style="font-size:0.75rem;color:var(--text-muted)">' + esc(template.tactics) + '</div>';
+      html += '<div style="padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px;font-size:0.75rem;color:var(--text-muted);white-space:pre-wrap">' + esc(template.tactics) + '</div>';
     }
 
     html += '</div>';
@@ -2820,11 +2820,15 @@ function renderCombatantDetail(c, idx, template) {
     html += '</div>';
     html += '<div class="detail-accordion-body" id="' + descId + '-body">';
     if (template.playerDescription) {
-      html += '<div style="margin-bottom:0.4rem"><div style="font-size:0.68rem;font-weight:700;color:var(--accent);margin-bottom:0.15rem">Player Description</div>';
+      html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
+      html += '<div style="display:flex;align-items:center;gap:0.3rem;margin-bottom:0.15rem"><span style="font-size:0.68rem;font-weight:700;color:var(--accent)">Player Description</span><div class="spacer"></div>';
+      html += '<button class="btn-sm" onclick="event.stopPropagation();copyDescText(this,\'player\',' + idx + ')" style="font-size:0.6rem;padding:0.1rem 0.4rem">Copy</button></div>';
       html += '<div style="font-size:0.75rem;color:var(--text-muted);white-space:pre-wrap">' + esc(template.playerDescription) + '</div></div>';
     }
     if (template.dmDescription) {
-      html += '<div><div style="font-size:0.68rem;font-weight:700;color:var(--warning);margin-bottom:0.15rem">DM Description</div>';
+      html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
+      html += '<div style="display:flex;align-items:center;gap:0.3rem;margin-bottom:0.15rem"><span style="font-size:0.68rem;font-weight:700;color:var(--warning)">DM Description</span><div class="spacer"></div>';
+      html += '<button class="btn-sm" onclick="event.stopPropagation();copyDescText(this,\'dm\',' + idx + ')" style="font-size:0.6rem;padding:0.1rem 0.4rem">Copy</button></div>';
       html += '<div style="font-size:0.75rem;color:var(--text-muted);white-space:pre-wrap">' + esc(template.dmDescription) + '</div></div>';
     }
     html += '</div>';
@@ -2840,6 +2844,20 @@ function toggleDescAccordion(idx) {
     toggle.classList.toggle('open');
     body.classList.toggle('open');
   }
+}
+
+function copyDescText(btn, type, idx) {
+  var combat = getActiveCombat();
+  var c = combat.combatants[idx];
+  var t = getTemplate(c);
+  if (!t) return;
+  var text = type === 'player' ? t.playerDescription : t.dmDescription;
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(function() {
+    var orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = orig; }, 1200);
+  });
 }
 
 function toggleCombatantDetail(idx) {
