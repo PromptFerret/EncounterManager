@@ -2168,7 +2168,7 @@ function renderInitiativeSetup(el) {
   });
 
   html += '<div style="margin-top:0.75rem;display:flex;gap:0.5rem">';
-  html += '<button class="btn-sm" onclick="showAddCombatantModal()">+ Add Combatant</button>';
+  html += '<button class="btn-sm" onclick="showAddCombatantModal()">+ Add</button>';
   html += '</div>';
 
   html += '<div class="form-actions">';
@@ -2225,6 +2225,7 @@ function showAddCombatantModal() {
     '<div class="form-section-title" style="margin-bottom:0.75rem">Add Combatant</div>' +
     '<div class="modal-toggle-group">' +
     '<button id="addModeAdhoc" class="active" onclick="switchAddMode(\'adhoc\')">Ad-hoc</button>' +
+    '<button id="addModePlayer" onclick="switchAddMode(\'player\')">Player</button>' +
     '<button id="addModeTemplate" onclick="switchAddMode(\'template\')">Monster Template</button>' +
     '</div>' +
     '<div id="addCombatantBody">' +
@@ -2245,28 +2246,44 @@ function showAddCombatantModal() {
 }
 
 function switchAddMode(mode) {
-  const adhocBtn = document.getElementById('addModeAdhoc');
-  const templateBtn = document.getElementById('addModeTemplate');
-  const body = document.getElementById('addCombatantBody');
+  var btns = ['addModeAdhoc', 'addModePlayer', 'addModeTemplate'];
+  btns.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.className = (id === 'addMode' + mode.charAt(0).toUpperCase() + mode.slice(1)) ? 'active' : '';
+  });
+  var body = document.getElementById('addCombatantBody');
   if (!body) return;
-  const combat = getActiveCombat();
-  const isActive = combat.round >= 1;
-  const defaultInit = isActive ? '20' : '';
+  var combat = getActiveCombat();
+  var isActive = combat.round >= 1;
+  var defaultInit = isActive ? '20' : '';
+  var inputStyle = 'padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem';
+  var monoStyle = inputStyle + ';font-family:var(--mono)';
 
   if (mode === 'adhoc') {
-    adhocBtn.className = 'active';
-    templateBtn.className = '';
     body.innerHTML =
       '<div style="display:flex;flex-direction:column;gap:0.5rem">' +
       '<label style="font-size:0.75rem;color:var(--text-muted)">Name</label>' +
-      '<input type="text" id="addCombatantName" placeholder="Lair Action, Reinforcements..." onclick="event.stopPropagation()" style="padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem">' +
+      '<input type="text" id="addCombatantName" placeholder="Lair Action, Reinforcements..." onclick="event.stopPropagation()" style="' + inputStyle + '">' +
       '<label style="font-size:0.75rem;color:var(--text-muted)">Initiative</label>' +
-      '<input type="number" id="addCombatantInit" value="' + defaultInit + '" step="0.01" placeholder="Init" onclick="event.stopPropagation()" style="width:80px;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem;font-family:var(--mono)">' +
+      '<input type="number" id="addCombatantInit" value="' + defaultInit + '" step="0.01" placeholder="Init" onclick="event.stopPropagation()" style="width:80px;' + monoStyle + '">' +
+      '</div>';
+    setTimeout(function() { var el = document.getElementById('addCombatantName'); if (el) el.focus(); }, 50);
+  } else if (mode === 'player') {
+    body.innerHTML =
+      '<div style="display:flex;flex-direction:column;gap:0.5rem">' +
+      '<label style="font-size:0.75rem;color:var(--text-muted)">Player Name</label>' +
+      '<input type="text" id="addCombatantName" placeholder="Player name..." onclick="event.stopPropagation()" style="' + inputStyle + '">' +
+      '<div style="display:flex;gap:0.75rem;align-items:flex-end">' +
+      '<div><label style="font-size:0.75rem;color:var(--text-muted)">Initiative</label>' +
+      '<input type="number" id="addCombatantInit" step="0.01" placeholder="Init" onclick="event.stopPropagation()" style="width:80px;' + monoStyle + ';display:block"></div>' +
+      '<div><label style="font-size:0.75rem;color:var(--text-muted)">AC</label>' +
+      '<input type="number" id="addCombatantAC" placeholder="AC" onclick="event.stopPropagation()" style="width:60px;' + monoStyle + ';display:block"></div>' +
+      '</div>' +
+      '<label style="font-size:0.75rem;color:var(--text-muted)">Notes</label>' +
+      '<input type="text" id="addCombatantNotes" placeholder="Optional notes..." onclick="event.stopPropagation()" style="' + inputStyle + '">' +
       '</div>';
     setTimeout(function() { var el = document.getElementById('addCombatantName'); if (el) el.focus(); }, 50);
   } else {
-    adhocBtn.className = '';
-    templateBtn.className = 'active';
     body.innerHTML =
       '<div style="display:flex;flex-direction:column;gap:0.5rem">' +
       '<label style="font-size:0.75rem;color:var(--text-muted)">Monster</label>' +
@@ -2274,14 +2291,14 @@ function switchAddMode(mode) {
       '<input type="text" id="combatMonsterPicker" placeholder="Search monsters..." autocomplete="off"' +
       ' oninput="filterCombatMonsterPicker(this.value)" onfocus="filterCombatMonsterPicker(this.value)"' +
       ' onclick="event.stopPropagation()"' +
-      ' style="width:100%;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem;box-sizing:border-box">' +
+      ' style="width:100%;' + inputStyle + ';box-sizing:border-box">' +
       '<div id="combatMonsterPickerDropdown" class="search-dropdown"></div>' +
       '</div>' +
       '<div style="display:flex;gap:0.75rem;align-items:flex-end">' +
       '<div><label style="font-size:0.75rem;color:var(--text-muted)">Quantity</label>' +
-      '<input type="number" id="addCombatantQty" value="1" min="1" max="20" onclick="event.stopPropagation()" style="width:60px;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem;font-family:var(--mono);display:block"></div>' +
+      '<input type="number" id="addCombatantQty" value="1" min="1" max="20" onclick="event.stopPropagation()" style="width:60px;' + monoStyle + ';display:block"></div>' +
       '<div><label style="font-size:0.75rem;color:var(--text-muted)">Init Override <span style="color:var(--text-dim)">(blank = roll)</span></label>' +
-      '<input type="number" id="addCombatantInit" step="0.01" placeholder="Auto" onclick="event.stopPropagation()" style="width:80px;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem;font-family:var(--mono);display:block"></div>' +
+      '<input type="number" id="addCombatantInit" step="0.01" placeholder="Auto" onclick="event.stopPropagation()" style="width:80px;' + monoStyle + ';display:block"></div>' +
       '</div>' +
       '</div>';
     setTimeout(function() { var el = document.getElementById('combatMonsterPicker'); if (el) el.focus(); }, 50);
@@ -2290,9 +2307,11 @@ function switchAddMode(mode) {
 
 function doAddCombatant() {
   const combat = getActiveCombat();
-  const isTemplate = document.getElementById('addModeTemplate') && document.getElementById('addModeTemplate').className === 'active';
+  const activeMode = document.getElementById('addModeTemplate') && document.getElementById('addModeTemplate').className === 'active' ? 'template'
+    : document.getElementById('addModePlayer') && document.getElementById('addModePlayer').className === 'active' ? 'player'
+    : 'adhoc';
 
-  if (isTemplate) {
+  if (activeMode === 'template') {
     // Template monster path
     const pickerEl = document.getElementById('combatMonsterPicker');
     const templateId = pickerEl && pickerEl.dataset.templateId;
@@ -2325,6 +2344,26 @@ function doAddCombatant() {
       combat.combatants.push(c);
     }
     setStatus('Added ' + qty + 'x ' + template.name, 'success');
+  } else if (activeMode === 'player') {
+    // Player path
+    const nameEl = document.getElementById('addCombatantName');
+    const name = nameEl && nameEl.value.trim();
+    if (!name) { setStatus('Enter a player name.', 'error'); return; }
+    const initEl = document.getElementById('addCombatantInit');
+    const init = initEl && initEl.value !== '' ? +initEl.value : null;
+    const acEl = document.getElementById('addCombatantAC');
+    const ac = acEl && acEl.value !== '' ? +acEl.value : null;
+    const notesEl = document.getElementById('addCombatantNotes');
+    const notes = notesEl && notesEl.value.trim() || '';
+    combat.combatants.push({
+      id: uuid(),
+      name: name,
+      type: 'player',
+      init: init,
+      ac: ac,
+      notes: notes
+    });
+    setStatus('Added player: ' + name, 'success');
   } else {
     // Ad-hoc path
     const nameEl = document.getElementById('addCombatantName');

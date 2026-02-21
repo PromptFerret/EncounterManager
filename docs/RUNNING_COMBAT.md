@@ -18,8 +18,9 @@ The initiative setup screen lists all combatants - monsters first, then players.
 
 **Players** have blank initiative fields. Enter each player's initiative roll.
 
-You can also click **+ Add Combatant** to add more combatants. A modal offers two options:
+You can also click **+ Add** to add more combatants. A modal offers three options:
 - **Ad-hoc** - name and initiative for lair actions, environmental effects, or custom entries
+- **Player** - name, initiative, AC, and notes for a player joining mid-combat (e.g., split party reconvening)
 - **Monster Template** - search your monster library, set a quantity, and add full stat-block monsters with auto-rolled initiative
 
 When all players have initiative values, click **Begin Combat** to sort everyone by initiative (descending) and start Round 1.
