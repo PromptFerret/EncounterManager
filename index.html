@@ -794,7 +794,8 @@ const STORAGE_KEYS = {
   groups: 'pf_enc_groups',
   encounters: 'pf_enc_encounters',
   parties: 'pf_enc_parties',
-  combats: 'pf_enc_combats'
+  combats: 'pf_enc_combats',
+  preferences: 'pf_enc_preferences'
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -806,7 +807,8 @@ let state = {
   groups: [],
   encounters: [],
   parties: [],
-  combats: []
+  combats: [],
+  preferences: { view: 'templates' }
 };
 
 let currentView = 'templates';
@@ -1174,6 +1176,9 @@ function switchView(view) {
   searchQuery = '';
 
   currentView = view;
+  state.preferences = state.preferences || {};
+  state.preferences.view = view;
+  save('preferences');
   // When navigating to combat via tab, show the combat list (not last-viewed combat)
   if (view === 'combat' && !pendingCombatEncounterId) {
     activeCombatId = null;
@@ -3398,7 +3403,8 @@ async function exportData() {
       templates: state.templates,
       encounters: state.encounters,
       parties: state.parties,
-      combats: state.combats
+      combats: state.combats,
+      preferences: state.preferences
     };
     const json = JSON.stringify(payload);
     const compressed = await compress(json);
@@ -3443,10 +3449,18 @@ function showImportDialog() {
       added += mergeArray(state.encounters, data.encounters);
       added += mergeArray(state.parties, data.parties);
       added += mergeArray(state.combats, data.combats);
+      if (data.preferences) {
+        state.preferences = Object.assign(state.preferences || {}, data.preferences);
+      }
       activeCombatId = null;
       save();
       setStatus('Backup loaded! ' + added + ' new item' + (added !== 1 ? 's' : '') + ' added, duplicates skipped.', 'success');
-      render();
+      var restoredView = state.preferences && state.preferences.view;
+      if (restoredView && ['templates', 'parties', 'encounters', 'combat'].includes(restoredView)) {
+        switchView(restoredView);
+      } else {
+        render();
+      }
       updateStorageInfo();
     } catch (e) {
       console.error('Import failed:', e);
@@ -3551,7 +3565,15 @@ function updateStorageInfo() {
 // ── Init ──
 // ═══════════════════════════════════════════════════════════════
 
-load().then(() => { render(); updateStorageInfo(); });
+load().then(() => {
+  var savedView = state.preferences && state.preferences.view;
+  if (savedView && ['templates', 'parties', 'encounters', 'combat'].includes(savedView)) {
+    switchView(savedView);
+  } else {
+    render();
+  }
+  updateStorageInfo();
+});
 </script>
 
 </body>
