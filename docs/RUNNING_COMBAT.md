@@ -44,7 +44,7 @@ A collapsed row shows:
 - **Name** with inline badges for active conditions, concentration, and legendary action/resistance counts
 - **AC** (monsters from template, players editable in combat)
 - **HP bar** (monsters only) - color-coded green/yellow/red based on remaining HP, showing current(+temp)/max
-- **R** (reaction indicator) - green when available, red when used. Click to toggle.
+- **R** (reaction indicator) - green circle when available, red when used. Click to toggle. Automatically resets to green at the start of the combatant's turn.
 
 Click any row to expand its detail panel.
 
