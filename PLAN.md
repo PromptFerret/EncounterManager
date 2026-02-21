@@ -189,6 +189,21 @@ The active combatant's detail panel is always expanded during their turn.
 - Previous turn's panel: if it was already expanded before auto-expand, leave it open. If it was auto-expanded, collapse it on turn advance.
 - Track with a transient `autoExpandedId` variable (not persisted). Set when auto-expanding a previously-collapsed panel. Cleared on turn advance after collapsing.
 
+## Phase 4.5 - Monster Descriptions (done)
+
+Two new text fields on monster templates for in-combat reference:
+
+- **`playerDescription`** - flavor text describing the creature's appearance and behavior. What the DM reads aloud or references when a player asks "what does it look like?"
+- **`dmDescription`** - DM-only lore, SRD reference text, background info, behavioral notes
+
+### Template Form
+
+Both fields are textareas in a new "Descriptions" section at the bottom of the template form, after Tactics & Notes.
+
+### Combat Detail Panel
+
+Shown as a collapsible accordion at the very bottom of the monster's detail panel (below concentration). Collapsed by default - click to expand/collapse. Only renders if at least one description has content. Player description labeled in accent color, DM description in warning color.
+
 ## Phase 5 - Combat Overrides (In-Combat Monster Editing)
 
 Edit any template field on in-flight monster combatants without modifying the original template. Supports single and batch editing with sparse delta overrides.

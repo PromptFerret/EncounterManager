@@ -594,6 +594,26 @@
     margin-bottom: 0.35rem;
   }
 
+  .detail-accordion-toggle {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    user-select: none;
+    margin-top: 0.5rem;
+    padding: 0.25rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .detail-accordion-toggle:hover { color: var(--text-muted); }
+  .detail-accordion-toggle .arrow { transition: transform 0.15s; display: inline-block; font-size: 0.6rem; }
+  .detail-accordion-toggle.open .arrow { transform: rotate(90deg); }
+  .detail-accordion-body { display: none; margin-top: 0.3rem; }
+  .detail-accordion-body.open { display: block; }
+
   .init-setup-row {
     display: grid;
     grid-template-columns: 80px 1fr auto 80px;
@@ -872,7 +892,8 @@ function newTemplate() {
     attacks: [], // each: { name, bonus, note, damages: [{ dice, type, note }] }
     multiattack: '',
     features: [],
-    legendaryActionBudget: 0, legendaryActions: [], legendaryResistances: 0
+    legendaryActionBudget: 0, legendaryActions: [], legendaryResistances: 0,
+    playerDescription: '', dmDescription: ''
   };
 }
 
@@ -1479,6 +1500,15 @@ function renderTemplateForm() {
   // ── Tactics ──
   html += '<div class="form-section"><div class="form-section-title">Tactics & Notes</div>';
   html += '<div class="form-field"><textarea rows="3" onchange="formData.tactics=this.value" placeholder="How this monster fights: target priority, positioning, retreat conditions...">' + esc(d.tactics) + '</textarea>';
+  html += '</div></div>';
+
+  // ── Descriptions ──
+  html += '<div class="form-section"><div class="form-section-title">Descriptions</div>';
+  html += '<div class="form-field"><label>Player Description</label>';
+  html += '<textarea rows="3" onchange="formData.playerDescription=this.value" placeholder="What players see: appearance, sounds, smells - read aloud or reference when asked...">' + esc(d.playerDescription || '') + '</textarea>';
+  html += '</div>';
+  html += '<div class="form-field"><label>DM Description</label>';
+  html += '<textarea rows="3" onchange="formData.dmDescription=this.value" placeholder="Lore, behavior, SRD reference text, background info...">' + esc(d.dmDescription || '') + '</textarea>';
   html += '</div></div>';
 
   // ── Form Actions ──
@@ -2776,7 +2806,34 @@ function renderCombatantDetail(c, idx, template) {
     html += '</div>';
   }
 
+  // ── Descriptions accordion (monsters only, if either description exists) ──
+  if (c.type === 'monster' && template && (template.playerDescription || template.dmDescription)) {
+    var descId = 'desc-accordion-' + idx;
+    html += '<div class="detail-accordion-toggle" onclick="event.stopPropagation();toggleDescAccordion(' + idx + ')" id="' + descId + '-toggle">';
+    html += '<span class="arrow">&#9654;</span> Descriptions';
+    html += '</div>';
+    html += '<div class="detail-accordion-body" id="' + descId + '-body">';
+    if (template.playerDescription) {
+      html += '<div style="margin-bottom:0.4rem"><div style="font-size:0.68rem;font-weight:700;color:var(--accent);margin-bottom:0.15rem">Player Description</div>';
+      html += '<div style="font-size:0.75rem;color:var(--text-muted);white-space:pre-wrap">' + esc(template.playerDescription) + '</div></div>';
+    }
+    if (template.dmDescription) {
+      html += '<div><div style="font-size:0.68rem;font-weight:700;color:var(--warning);margin-bottom:0.15rem">DM Description</div>';
+      html += '<div style="font-size:0.75rem;color:var(--text-muted);white-space:pre-wrap">' + esc(template.dmDescription) + '</div></div>';
+    }
+    html += '</div>';
+  }
+
   return html;
+}
+
+function toggleDescAccordion(idx) {
+  var toggle = document.getElementById('desc-accordion-' + idx + '-toggle');
+  var body = document.getElementById('desc-accordion-' + idx + '-body');
+  if (toggle && body) {
+    toggle.classList.toggle('open');
+    body.classList.toggle('open');
+  }
 }
 
 function toggleCombatantDetail(idx) {
