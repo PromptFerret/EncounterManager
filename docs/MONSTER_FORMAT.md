@@ -104,7 +104,8 @@ The `templates` array can contain one or more monster templates. When importing,
   "legendaryActions": [],
   "legendaryResistances": 0,
   "tactics": "",
-  "groups": []
+  "playerDescription": "",
+  "dmDescription": ""
 }
 ```
 
@@ -280,8 +281,9 @@ Array of feature/trait objects:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `tactics` | string | DM notes about how the monster fights. Shown in combat detail panel. |
-| `groups` | array | Reserved for future use (monster grouping). Leave as `[]`. |
+| `tactics` | string | DM notes about how the monster fights. Shown in combat detail panel under the Tactics & Descriptions accordion. |
+| `playerDescription` | string | Flavor text - what players see (appearance, sounds, smells). Accessible during combat via the accordion with a Copy button. |
+| `dmDescription` | string | DM-only lore, SRD reference text, behavioral notes. Accessible during combat via the accordion with a Copy button. |
 
 ## Creating Monsters for Import
 
