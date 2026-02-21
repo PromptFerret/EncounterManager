@@ -7,6 +7,21 @@
 ## What This Is
 A single self-contained HTML file (`index.html`) for D&D encounter management and initiative tracking. DMs build monster templates, organize parties, construct encounters, and run combat - all in the browser with IndexedDB persistence (auto-migrates from localStorage, falls back to localStorage if IndexedDB unavailable). No server, no accounts, no dependencies.
 
+## User Documentation
+
+The `docs/` folder contains user-facing documentation rendered via MarkdownSite cross-repo links (`chrome=false` mode). Each doc has its own breadcrumb navigation.
+
+| File | Topic |
+|------|-------|
+| `docs/INDEX.md` | Documentation home - quick start, guide links |
+| `docs/MONSTER_TEMPLATES.md` | Building and editing monster stat blocks |
+| `docs/PARTIES_AND_ENCOUNTERS.md` | Setting up parties and encounters |
+| `docs/RUNNING_COMBAT.md` | Core combat loop - initiative, turns, HP, attacks |
+| `docs/COMBAT_DEEP_DIVE.md` | Conditions, concentration, legendaries, feature tracking |
+| `docs/IMPORT_EXPORT.md` | Backups, restoring, sharing, SquishText format |
+
+Docs are linked from the app footer and README. Update docs when features change.
+
 ## Code Map
 
 The file is ~3300+ lines. Rough section layout:
