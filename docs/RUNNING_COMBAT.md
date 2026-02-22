@@ -27,10 +27,23 @@ When all players have initiative values, click **Begin Combat** to sort everyone
 ### Top Bar
 
 - **Round N** badge showing the current round
-- **<< Prev** to go back one turn (disabled at round 1 first combatant - there is no prior turn)
+- **<< Prev** to go back one turn (disabled at round 1 first combatant - there is no prior turn). Going back reverses turn-start effects - condition countdowns re-increment, and conditions that just expired are restored.
 - **Next >>** to advance to the next turn (this is the button you will click most)
 - **+ Add** to add a combatant mid-combat (see [Adding Combatants](#adding-combatants) below)
+- **Edit Mode** to enter batch edit mode for modifying monster stats (see [Editing Monsters Mid-Combat](#editing-monsters-mid-combat) below)
 - **End Combat** to end and remove the combat
+
+### Combat Info
+
+Below the top bar, a summary shows encounter details for quick reference:
+
+- **Party** - the party name
+- **Encounter** - the encounter name
+- **Campaign** - campaign name (if set on the encounter)
+- **Location** - location (if set)
+- **Notes** - encounter notes (if set)
+
+Each field has a **Copy** button for quick clipboard access. Only fields with content are shown.
 
 ### The Initiative List
 
@@ -62,6 +75,10 @@ Shows current HP / max HP (with temp HP if active). Three buttons:
 
 If the template has multiattack text, it shows here as a reminder (e.g., "Two claw attacks").
 
+**Features**
+
+Each feature from the template with its description. Dice notation in the text (like `2d6+3`) is clickable and rolls to the log. Features with recharge and use tracking are covered in [Combat Deep Dive](COMBAT_DEEP_DIVE.md).
+
 **Attacks**
 
 For each attack defined on the template:
@@ -75,21 +92,29 @@ All roll results appear in the **roll log** below the attacks. Crits show as "NA
 
 **Roll Log**
 
-A scrolling list of all rolls made for this combatant during the current turn - attack rolls, damage, ability checks, saving throws, feature dice, and recharge rolls. The log clears at the start of the combatant's next turn.
+A scrolling list of all rolls made for this combatant during the current turn - attack rolls, damage, ability checks, saving throws, skill checks, feature dice, and recharge rolls. The log clears at the start of the combatant's next turn.
 
 If the combatant's panel is collapsed and there are unread roll entries, a pulsing notification badge appears on their row.
 
 ### Right Column
 
-**Ability Scores**
+**Speed and Senses** - shown at the top for quick reference.
 
-Shows all six scores with modifiers (e.g., "STR 16 (+3)"). Each has two buttons that open roll mode popups:
-- **Chk** - click to choose: Disadvantage, Normal, or Advantage. Rolls 1d20 + ability modifier.
-- **Save** - click to choose: Disadvantage, Normal, or Advantage. Rolls 1d20 + save bonus (if proficient from template saving throws) or ability modifier.
+**Passives** - Passive Perception (PP), Passive Investigation (PI), and Passive Insight (PIn). Derived from skill bonuses or ability modifiers.
 
-**Speed and Senses** - shown if defined on the template.
+**Checks & Saves**
 
-**Features** - each feature from the template with its description. Dice notation in the text (like `2d6+3`) is clickable and rolls to the log. Features with recharge and use tracking are covered in [Combat Deep Dive](COMBAT_DEEP_DIVE.md).
+A 3-column grid showing all six ability scores. Each ability has:
+- A **check button** showing the score and modifier (e.g., "18 (+4)"). Click to open the roll mode popup (Disadvantage / Normal / Advantage). Rolls 1d20 + ability modifier.
+- A **save button** showing the save bonus (e.g., "+6"). Click to open the roll mode popup. Rolls 1d20 + save bonus (proficient) or ability modifier.
+
+Proficient saves are highlighted in accent color so they stand out.
+
+**Skills**
+
+A 3-column grid showing all 18 D&D skills. Each skill has a button showing the bonus (e.g., "+4"). Click to open the roll mode popup (Disadvantage / Normal / Advantage). Rolls 1d20 + skill bonus (proficient) or the governing ability modifier.
+
+Proficient skills are highlighted in accent color. Non-proficient skills use the ability modifier (e.g., Religion uses INT mod if not proficient).
 
 ### Tactics & Descriptions Accordion
 
@@ -107,7 +132,7 @@ Players show an editable **AC** field and a note that conditions and details are
 
 ## Expanded Detail Panel (Ad-hoc)
 
-Ad-hoc combatants (lair actions, environmental effects) show a label identifying them as custom entries.
+Ad-hoc combatants (lair actions, environmental effects) show a label identifying them as custom entries. They have a roll log that displays condition countdown notifications - useful for tracking timed environmental effects (e.g., a lair action that triggers every 3 rounds).
 
 ## Common Controls (All Combatants)
 
@@ -168,10 +193,10 @@ For applying the same change to multiple monsters of the same type:
 1. Click **Edit Mode** in the combat bar
 2. Check the boxes on the monsters you want to edit (only same-template monsters can be selected together)
 3. Click **Edit Selected** to open the edit form
-4. Make your changes - modified fields are highlighted and show a revert button
-5. Click **Apply** to write the changes, or **Cancel** to discard
+4. Make your changes - modified fields are highlighted in yellow and show a revert button
+5. Click **Save** to write the changes (stays in the form for further edits), **Close** to exit the form (warns if unsaved changes), or **Cancel** to discard all changes (warns if unsaved)
 
-Overrides are shown on combatant rows with a visual badge, and all overridden values are highlighted in the detail panel. The original template is never modified.
+Overrides are shown on combatant rows with a yellow badge, and individually modified values are highlighted in the detail panel. The original template is never modified.
 
 For the full details on overrides, conflict handling, and what can/cannot be changed, see [Combat Deep Dive](COMBAT_DEEP_DIVE.md).
 

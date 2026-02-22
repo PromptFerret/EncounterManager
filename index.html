@@ -482,6 +482,40 @@
     white-space: nowrap;
   }
 
+  .combat-info {
+    padding: 0.35rem 0.75rem;
+    margin: 0 -0.75rem 0.35rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .combat-info-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.72rem;
+  }
+  .combat-info-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    min-width: 5.5rem;
+    flex-shrink: 0;
+  }
+  .combat-info-value {
+    flex: 1;
+    color: var(--text-muted);
+    min-width: 0;
+  }
+  .combat-info-copy {
+    font-size: 0.6rem !important;
+    padding: 0.1rem 0.4rem !important;
+    flex-shrink: 0;
+  }
+
   .combatant-row {
     display: grid;
     grid-template-columns: 50px 1fr 50px 120px 40px;
@@ -584,7 +618,7 @@
   .combatant-detail.expanded { display: block; }
   .detail-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr auto;
     gap: 0.75rem;
   }
   .detail-section-title {
@@ -594,6 +628,100 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
     margin-bottom: 0.35rem;
+  }
+
+  /* Attribute check/save grid */
+  .attr-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 5.5rem));
+    gap: 0.3rem 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .attr-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+  }
+  .attr-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .attr-sub {
+    font-size: 0.5rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-top: 0.1rem;
+  }
+  .attr-btn {
+    width: 100%;
+    padding: 0.2rem 0.3rem;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-align: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .attr-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .attr-btn.proficient {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .attr-btn.proficient:hover {
+    color: white;
+    background: var(--accent);
+  }
+  .attr-btn.save-btn {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.3rem;
+    border-style: dashed;
+  }
+  .attr-btn.save-btn.proficient {
+    border-style: solid;
+  }
+
+  /* Skill grid */
+  .skill-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 5.5rem));
+    gap: 0.3rem 0.5rem;
+  }
+  .skill-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+  }
+  .skill-label {
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    text-align: center;
+    line-height: 1.1;
+  }
+
+  /* Passive stats row */
+  .passive-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    font-size: 0.72rem;
+    font-family: var(--mono);
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+  }
+  .passive-label {
+    color: var(--text-dim);
   }
 
   .detail-accordion-toggle {
@@ -661,13 +789,13 @@
   .multiattack-box {
     font-size: 0.78rem;
     font-weight: 600;
-    color: var(--warning);
+    color: #c4a8ff;
     padding: 0.35rem 0.6rem;
     margin-top: 0.5rem;
-    background: rgba(224, 176, 85, 0.08);
-    border: 1px solid rgba(224, 176, 85, 0.25);
+    background: rgba(124, 92, 191, 0.08);
+    border: 1px solid rgba(124, 92, 191, 0.25);
     border-radius: var(--radius);
-    border-left: 3px solid var(--warning);
+    border-left: 3px solid var(--accent);
   }
 
   .roll-log {
@@ -750,13 +878,14 @@
   /* ── Edit Mode (Combat Overrides) ── */
   .edit-checkbox { accent-color: var(--accent); width: auto; cursor: pointer; }
   .edit-checkbox:disabled { opacity: 0.3; cursor: not-allowed; }
-  .override-badge { font-size: 0.7rem; color: var(--accent); margin-left: 0.25rem; vertical-align: middle; }
+  .override-badge { font-size: 0.7rem; color: var(--warning); margin-left: 0.25rem; vertical-align: middle; }
 
   /* Roll mode popup */
   #rollModePopup {
     display: none;
     position: fixed;
     z-index: 1000;
+    flex-direction: column;
     gap: 0.3rem;
     padding: 0.4rem;
     background: var(--surface);
@@ -764,29 +893,29 @@
     border-radius: var(--radius);
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
   }
-  .combatant-name.has-overrides { color: #c4a8ff; }
+  .combatant-name.has-overrides { color: var(--warning); }
   .override-highlight {
-    border-left: 3px solid var(--accent);
+    border-left: 3px solid var(--warning);
     padding-left: 0.4rem;
-    background: rgba(124, 92, 191, 0.15);
+    background: rgba(224, 176, 85, 0.1);
     border-radius: 2px;
-    color: #c4a8ff;
+    color: var(--warning);
   }
-  .edit-field-modified { border-color: var(--accent) !important; }
+  .edit-field-modified { border-color: var(--warning) !important; }
   .edit-field-conflict { opacity: 0.5; }
   .btn-revert {
     font-size: 0.78rem;
     line-height: 1.16;
     padding: 0.35rem 0.5rem;
-    color: var(--accent);
-    border: 1px solid var(--accent);
+    color: var(--warning);
+    border: 1px solid var(--warning);
     background: transparent;
     border-radius: var(--radius);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
   }
-  .btn-revert:hover { background: var(--accent); color: white; }
+  .btn-revert:hover { background: var(--warning); color: white; }
 
   /* ── Responsive ── */
   @supports (height: 100dvh) { body { height: 100dvh; } }
@@ -852,6 +981,14 @@ const SKILLS = [
   'Nature', 'Perception', 'Performance', 'Persuasion', 'Religion',
   'Sleight of Hand', 'Stealth', 'Survival'
 ];
+const SKILL_ABILITY_MAP = {
+  'Acrobatics': 'dex', 'Animal Handling': 'wis', 'Arcana': 'int',
+  'Athletics': 'str', 'Deception': 'cha', 'History': 'int',
+  'Insight': 'wis', 'Intimidation': 'cha', 'Investigation': 'int',
+  'Medicine': 'wis', 'Nature': 'int', 'Perception': 'wis',
+  'Performance': 'cha', 'Persuasion': 'cha', 'Religion': 'int',
+  'Sleight of Hand': 'dex', 'Stealth': 'dex', 'Survival': 'wis'
+};
 const SIZES = ['Tiny', 'Small', 'Medium', 'Large', 'Huge', 'Gargantuan'];
 const CONDITIONS = ['Blinded','Charmed','Deafened','Frightened','Grappled','Incapacitated','Invisible','Paralyzed','Petrified','Poisoned','Prone','Restrained','Stunned','Unconscious'];
 const STORAGE_KEYS = {
@@ -889,6 +1026,7 @@ let editLockedTemplateId = null;   // template ID locked on first checkbox selec
 let editFormData = null;           // working copy of template being edited
 let editFormVisible = false;       // is the edit form showing
 let editRawTemplate = null;        // raw template for diffing/revert
+let editFormSnapshot = null;       // snapshot of editFormData at open/save for dirty check
 let editConflicts = new Set();     // set of field paths where selected combatants disagree
 
 function getActiveCombat() {
@@ -924,6 +1062,16 @@ function calcPassivePerception(t) {
 
 function getPassivePerception(t) {
   return t.passivePerception != null ? t.passivePerception : calcPassivePerception(t);
+}
+
+function calcPassiveInvestigation(t) {
+  var skill = t.skills.find(function(s) { return s.name === 'Investigation'; });
+  return 10 + (skill ? skill.bonus : abilityMod(t.abilities.int));
+}
+
+function calcPassiveInsight(t) {
+  var skill = t.skills.find(function(s) { return s.name === 'Insight'; });
+  return 10 + (skill ? skill.bonus : abilityMod(t.abilities.wis));
 }
 
 function updatePPDisplay() {
@@ -1229,11 +1377,33 @@ function saveCombat() {
   save('preferences');
 }
 
+function ensureArray(val) {
+  if (Array.isArray(val)) return val;
+  if (val && typeof val === 'object') {
+    var arr = [];
+    for (var k in val) {
+      if (val.hasOwnProperty(k)) {
+        var idx = parseInt(k);
+        if (!isNaN(idx)) arr[idx] = val[k];
+      }
+    }
+    return arr;
+  }
+  return [];
+}
+
 function getTemplate(c) {
   if (c.type !== 'monster') return null;
   var raw = state.templates.find(t => t.id === c.templateId);
   if (!raw) return null;
-  return (c.overrides && Object.keys(c.overrides).length > 0) ? deepMerge(raw, c.overrides) : raw;
+  var t = (c.overrides && Object.keys(c.overrides).length > 0) ? deepMerge(raw, c.overrides) : raw;
+  // Safety: ensure array fields are arrays (guards against corrupted sparse-object overrides)
+  t.savingThrows = ensureArray(t.savingThrows);
+  t.skills = ensureArray(t.skills);
+  t.attacks = ensureArray(t.attacks);
+  t.features = ensureArray(t.features);
+  t.legendaryActions = ensureArray(t.legendaryActions);
+  return t;
 }
 
 function getRawTemplate(c) {
@@ -1263,6 +1433,19 @@ function deepMerge(base, overrides) {
           } else {
             result[key][i] = deepClone(ov[i]);
           }
+        }
+      }
+    } else if (Array.isArray(bv) && !Array.isArray(ov) && typeof ov === 'object' && ov !== null) {
+      // Sparse object override against array base (e.g. {"0": {bonus: 21}} vs [{ability:"str",bonus:20}])
+      result[key] = [];
+      for (var i = 0; i < bv.length; i++) {
+        var sparseVal = ov[String(i)] !== undefined ? ov[String(i)] : ov[i];
+        if (sparseVal === null || sparseVal === undefined) {
+          result[key][i] = deepClone(bv[i]);
+        } else if (typeof sparseVal === 'object' && !Array.isArray(sparseVal) && typeof bv[i] === 'object' && !Array.isArray(bv[i])) {
+          result[key][i] = deepMerge(bv[i], sparseVal);
+        } else {
+          result[key][i] = deepClone(sparseVal);
         }
       }
     } else if (typeof bv === 'object' && !Array.isArray(bv) && bv !== null && typeof ov === 'object' && !Array.isArray(ov) && ov !== null) {
@@ -1359,6 +1542,7 @@ function switchView(view) {
   editFormData = null;
   editFormVisible = false;
   editRawTemplate = null;
+  editFormSnapshot = null;
   editConflicts.clear();
 
   currentView = view;
@@ -2627,6 +2811,7 @@ function exitEditMode() {
   editFormData = null;
   editFormVisible = false;
   editRawTemplate = null;
+  editFormSnapshot = null;
   editConflicts.clear();
   render();
 }
@@ -2641,6 +2826,7 @@ function toggleEditMode() {
     editFormData = null;
     editFormVisible = false;
     editRawTemplate = null;
+    editFormSnapshot = null;
     editConflicts.clear();
     render();
   }
@@ -2689,8 +2875,13 @@ function openEditForm() {
     });
   }
 
+  editFormSnapshot = JSON.stringify(editFormData);
   editFormVisible = true;
   render();
+}
+
+function isEditFormDirty() {
+  return JSON.stringify(editFormData) !== editFormSnapshot;
 }
 
 function getNestedValue(obj, path) {
@@ -2840,7 +3031,14 @@ function applyEditOverrides() {
     count++;
   });
   saveCombat();
+  editFormSnapshot = JSON.stringify(editFormData);
   setStatus('Applied overrides to ' + count + ' combatant' + (count !== 1 ? 's' : ''), 'success');
+}
+
+function closeEditOverrides() {
+  if (isEditFormDirty()) {
+    if (!confirm('You have unsaved changes. Close without saving?')) return;
+  }
   exitEditMode();
 }
 
@@ -2849,13 +3047,20 @@ function setNestedValue(obj, path, val) {
   var cur = obj;
   for (var i = 0; i < parts.length - 1; i++) {
     var key = parts[i];
-    if (cur[key] === undefined) cur[key] = {};
+    if (cur[key] === undefined) {
+      // If the next key is numeric, create an array instead of an object
+      var nextKey = parts[i + 1];
+      cur[key] = (!isNaN(parseInt(nextKey)) && String(parseInt(nextKey)) === nextKey) ? [] : {};
+    }
     cur = cur[key];
   }
   cur[parts[parts.length - 1]] = val;
 }
 
 function cancelEditOverrides() {
+  if (isEditFormDirty()) {
+    if (!confirm('Discard all changes?')) return;
+  }
   setStatus('', '');
   exitEditMode();
 }
@@ -3082,7 +3287,8 @@ function renderEditOverrideForm() {
 
   // ── Form Actions ──
   html += '<div class="form-actions">';
-  html += '<button class="btn-action" onclick="applyEditOverrides()">Apply</button>';
+  html += '<button class="btn-action" onclick="applyEditOverrides()">Save</button>';
+  html += '<button onclick="closeEditOverrides()">Close</button>';
   html += '<button class="btn-danger" onclick="cancelEditOverrides()">Cancel</button>';
   html += '</div>';
 
@@ -3133,6 +3339,51 @@ function renderActiveCombat(el) {
   html += '<button class="btn-sm" onclick="showAddCombatantModal()"' + editDisabled + '>+ Add</button>';
   html += '<button class="btn-sm btn-danger" onclick="endCombat()"' + editDisabled + '>End Combat</button>';
   html += '</div>';
+
+  // ── Combat Info Header ──
+  var combatEnc = state.encounters.find(function(e) { return e.id === combat.encounterId; });
+  var combatParty = state.parties.find(function(p) { return p.id === combat.partyId; });
+  if (combatEnc || combatParty) {
+    html += '<div class="combat-info">';
+    if (combatParty && combatParty.name) {
+      html += '<div class="combat-info-row">';
+      html += '<span class="combat-info-label">Party</span>';
+      html += '<span class="combat-info-value">' + esc(combatParty.name) + '</span>';
+      html += '<button class="btn-sm combat-info-copy" onclick="event.stopPropagation();copyCombatField(this,\'party\')">Copy</button>';
+      html += '</div>';
+    }
+    if (combatEnc) {
+      if (combatEnc.name) {
+        html += '<div class="combat-info-row">';
+        html += '<span class="combat-info-label">Encounter</span>';
+        html += '<span class="combat-info-value">' + esc(combatEnc.name) + '</span>';
+        html += '<button class="btn-sm combat-info-copy" onclick="event.stopPropagation();copyCombatField(this,\'name\')">Copy</button>';
+        html += '</div>';
+      }
+      if (combatEnc.campaign) {
+        html += '<div class="combat-info-row">';
+        html += '<span class="combat-info-label">Campaign</span>';
+        html += '<span class="combat-info-value">' + esc(combatEnc.campaign) + '</span>';
+        html += '<button class="btn-sm combat-info-copy" onclick="event.stopPropagation();copyCombatField(this,\'campaign\')">Copy</button>';
+        html += '</div>';
+      }
+      if (combatEnc.location) {
+        html += '<div class="combat-info-row">';
+        html += '<span class="combat-info-label">Location</span>';
+        html += '<span class="combat-info-value">' + esc(combatEnc.location) + '</span>';
+        html += '<button class="btn-sm combat-info-copy" onclick="event.stopPropagation();copyCombatField(this,\'location\')">Copy</button>';
+        html += '</div>';
+      }
+      if (combatEnc.notes) {
+        html += '<div class="combat-info-row" style="align-items:flex-start">';
+        html += '<span class="combat-info-label">Notes</span>';
+        html += '<span class="combat-info-value" style="white-space:pre-wrap">' + esc(combatEnc.notes) + '</span>';
+        html += '<button class="btn-sm combat-info-copy" onclick="event.stopPropagation();copyCombatField(this,\'notes\')">Copy</button>';
+        html += '</div>';
+      }
+    }
+    html += '</div>';
+  }
 
   // ── Edit Form or Combatant Rows ──
   if (editMode && editFormVisible) {
@@ -3255,7 +3506,7 @@ function renderCombatantDetail(c, idx, template) {
   let html = '<div class="detail-grid">';
 
   if (c.type === 'monster' && template) {
-    // Left column: HP + Attacks
+    // Left column: HP + Features + Attacks + Roll Log
     html += '<div>';
 
     // HP Controls
@@ -3277,6 +3528,36 @@ function renderCombatantDetail(c, idx, template) {
     // Multiattack
     if (template.multiattack) {
       html += '<div class="multiattack-box">' + ovh(c, 'multiattack', 'Multiattack: ' + esc(template.multiattack)) + '</div>';
+    }
+
+    // Features (moved from right column)
+    if (template.features.length > 0) {
+      html += '<div class="detail-section-title" style="margin-top:0.5rem">Features</div>';
+      template.features.forEach((f, fIdx) => {
+        html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
+        html += '<div style="font-size:0.75rem;display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">';
+        html += '<strong>' + ovh(c, 'features.' + fIdx + '.name', esc(f.name)) + '</strong>';
+        if (f.recharge) html += '<span style="color:var(--warning)">' + ovh(c, 'features.' + fIdx + '.recharge', '(Recharge ' + esc(f.recharge) + ')') + '</span>';
+        if (f.usesMax) {
+          const remaining = c.featureUses && c.featureUses[fIdx] !== undefined ? c.featureUses[fIdx] : f.usesMax;
+          html += '<span style="font-family:var(--mono);font-size:0.72rem;color:' + (remaining === 0 ? 'var(--error)' : 'var(--text-dim)') + '">Uses: ' + remaining + '/' + f.usesMax + '</span>';
+          html += '<button class="btn-sm btn-accent"' + (remaining <= 0 ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();useFeature(' + idx + ',' + fIdx + ')"' + (remaining <= 0 ? ' disabled' : '') + '>Use</button>';
+          html += '<button class="btn-sm btn-success"' + (remaining >= f.usesMax ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();restoreFeature(' + idx + ',' + fIdx + ')"' + (remaining >= f.usesMax ? ' disabled' : '') + '>Restore</button>';
+        }
+        if (f.recharge && f.usesMax) {
+          const remaining = c.featureUses && c.featureUses[fIdx] !== undefined ? c.featureUses[fIdx] : f.usesMax;
+          if (remaining === 0) {
+            html += '<button class="btn-sm btn-warning" onclick="event.stopPropagation();rollRecharge(' + idx + ',' + fIdx + ')">Roll Recharge</button>';
+          }
+        }
+        html += '</div>';
+        if (f.desc) {
+          var fDescHtml = renderDiceText(esc(f.desc), idx, 'feature', fIdx);
+          if (isFieldOverridden(c, 'features.' + fIdx + '.desc')) fDescHtml = '<span class="override-highlight">' + fDescHtml + '</span>';
+          html += '<div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem">' + fDescHtml + '</div>';
+        }
+        html += '</div>';
+      });
     }
 
     // Attacks
@@ -3321,54 +3602,83 @@ function renderCombatantDetail(c, idx, template) {
 
     html += '</div>';
 
-    // Right column: Stats summary
+    // Right column: Reference + Roll
     html += '<div>';
-    html += '<div class="detail-section-title">Stats</div>';
-    html += '<div style="font-size:0.72rem;color:var(--text-muted);display:grid;grid-template-columns:repeat(2,1fr);gap:0.15rem 0.5rem">';
-    ABILITIES.forEach(ab => {
-      html += '<div style="display:flex;align-items:center;gap:0.3rem">';
-      html += '<span style="min-width:4.5em">' + ab.toUpperCase() + ' ' + ovh(c, 'abilities.' + ab, template.abilities[ab] + ' (' + modStr(template.abilities[ab]) + ')') + '</span>';
-      html += '<button class="btn-sm btn-accent" style="font-size:0.6rem;padding:0.05rem 0.25rem" onclick="showRollPopup(event,\'rollAbilityCheck\',' + idx + ',\'' + ab + '\')">Chk</button>';
-      html += '<button class="btn-sm btn-accent" style="font-size:0.6rem;padding:0.05rem 0.25rem" onclick="showRollPopup(event,\'rollSavingThrow\',' + idx + ',\'' + ab + '\')">Save</button>';
-      html += '</div>';
-    });
-    html += '</div>';
 
-    // Speed, senses
-    html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:0.3rem">';
+    // Speed & Senses
+    html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:0.4rem">';
     if (template.speed) html += 'Speed: ' + ovh(c, 'speed', esc(template.speed)) + '<br>';
     if (template.senses) html += 'Senses: ' + ovh(c, 'senses', esc(template.senses)) + '<br>';
     html += '</div>';
 
-    // Features
-    if (template.features.length > 0) {
-      html += '<div class="detail-section-title" style="margin-top:0.5rem">Features</div>';
-      template.features.forEach((f, fIdx) => {
-        html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
-        html += '<div style="font-size:0.75rem;display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">';
-        html += '<strong>' + ovh(c, 'features.' + fIdx + '.name', esc(f.name)) + '</strong>';
-        if (f.recharge) html += '<span style="color:var(--warning)">' + ovh(c, 'features.' + fIdx + '.recharge', '(Recharge ' + esc(f.recharge) + ')') + '</span>';
-        if (f.usesMax) {
-          const remaining = c.featureUses && c.featureUses[fIdx] !== undefined ? c.featureUses[fIdx] : f.usesMax;
-          html += '<span style="font-family:var(--mono);font-size:0.72rem;color:' + (remaining === 0 ? 'var(--error)' : 'var(--text-dim)') + '">Uses: ' + remaining + '/' + f.usesMax + '</span>';
-          html += '<button class="btn-sm btn-accent"' + (remaining <= 0 ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();useFeature(' + idx + ',' + fIdx + ')"' + (remaining <= 0 ? ' disabled' : '') + '>Use</button>';
-          html += '<button class="btn-sm btn-success"' + (remaining >= f.usesMax ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();restoreFeature(' + idx + ',' + fIdx + ')"' + (remaining >= f.usesMax ? ' disabled' : '') + '>Restore</button>';
+    // Passives
+    html += '<div class="passive-row">';
+    html += '<span><span class="passive-label">PP </span>' + ovh(c, 'passivePerception', '' + getPassivePerception(template)) + '</span>';
+    html += '<span><span class="passive-label">PI </span>' + calcPassiveInvestigation(template) + '</span>';
+    html += '<span><span class="passive-label">PIn </span>' + calcPassiveInsight(template) + '</span>';
+    html += '</div>';
+
+    // Checks & Saves grid
+    html += '<div class="detail-section-title">Checks & Saves</div>';
+    for (var attrRow = 0; attrRow < 2; attrRow++) {
+      html += '<div class="attr-grid">';
+      for (var attrCol = 0; attrCol < 3; attrCol++) {
+        var ab = ABILITIES[attrRow * 3 + attrCol];
+        var score = template.abilities[ab];
+        var mod = abilityMod(score);
+        var st = template.savingThrows && template.savingThrows.find(function(s) { return s.ability === ab; });
+        var saveMod = st ? st.bonus : mod;
+        var saveProfClass = st ? ' proficient' : '';
+
+        html += '<div class="attr-cell">';
+        html += '<span class="attr-label">' + ab.toUpperCase() + '</span>';
+        // Check button: score (+mod)
+        html += '<button class="attr-btn" onclick="showRollPopup(event,\'rollAbilityCheck\',' + idx + ',\'' + ab + '\')">';
+        html += ovh(c, 'abilities.' + ab, score + ' (' + modStr(score) + ')');
+        html += '</button>';
+        // Save sub-label + button
+        html += '<span class="attr-sub">save</span>';
+        var saveDisplay = (saveMod >= 0 ? '+' : '') + saveMod;
+        var rawT = getRawTemplate(c);
+        if (rawT && isFieldOverridden(c, 'savingThrows')) {
+          var rawSt = rawT.savingThrows && rawT.savingThrows.find(function(s) { return s.ability === ab; });
+          var rawSaveMod = rawSt ? rawSt.bonus : abilityMod(rawT.abilities[ab]);
+          if (saveMod !== rawSaveMod) saveDisplay = '<span class="override-highlight">' + saveDisplay + '</span>';
         }
-        if (f.recharge && f.usesMax) {
-          const remaining = c.featureUses && c.featureUses[fIdx] !== undefined ? c.featureUses[fIdx] : f.usesMax;
-          if (remaining === 0) {
-            html += '<button class="btn-sm btn-warning" onclick="event.stopPropagation();rollRecharge(' + idx + ',' + fIdx + ')">Roll Recharge</button>';
-          }
-        }
+        html += '<button class="attr-btn save-btn' + saveProfClass + '" onclick="showRollPopup(event,\'rollSavingThrow\',' + idx + ',\'' + ab + '\')">';
+        html += saveDisplay;
+        html += '</button>';
         html += '</div>';
-        if (f.desc) {
-          var fDescHtml = renderDiceText(esc(f.desc), idx, 'feature', fIdx);
-          if (isFieldOverridden(c, 'features.' + fIdx + '.desc')) fDescHtml = '<span class="override-highlight">' + fDescHtml + '</span>';
-          html += '<div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem">' + fDescHtml + '</div>';
-        }
-        html += '</div>';
-      });
+      }
+      html += '</div>';
     }
+
+    // Skills grid
+    html += '<div class="detail-section-title" style="margin-top:0.75rem">Skills</div>';
+    html += '<div class="skill-grid">';
+    SKILLS.forEach(function(skillName, skillIdx) {
+      var skillAbility = SKILL_ABILITY_MAP[skillName];
+      var skill = template.skills.find(function(s) { return s.name === skillName; });
+      var skillMod = skill ? skill.bonus : abilityMod(template.abilities[skillAbility]);
+      var skillProfClass = skill ? ' proficient' : '';
+      var skillDisplay = (skillMod >= 0 ? '+' : '') + skillMod;
+      if (isFieldOverridden(c, 'skills')) {
+        var rawT2 = getRawTemplate(c);
+        if (rawT2) {
+          var rawSkill = rawT2.skills.find(function(s) { return s.name === skillName; });
+          var rawSkillMod = rawSkill ? rawSkill.bonus : abilityMod(rawT2.abilities[skillAbility]);
+          if (skillMod !== rawSkillMod) skillDisplay = '<span class="override-highlight">' + skillDisplay + '</span>';
+        }
+      }
+
+      html += '<div class="skill-cell">';
+      html += '<span class="skill-label">' + esc(skillName) + '</span>';
+      html += '<button class="attr-btn' + skillProfClass + '" onclick="showRollPopup(event,\'rollSkillCheck\',' + idx + ',' + skillIdx + ')">';
+      html += skillDisplay;
+      html += '</button>';
+      html += '</div>';
+    });
+    html += '</div>';
 
     // Legendary Actions
     if (template.legendaryActionBudget > 0 && template.legendaryActions.length > 0) {
@@ -3414,7 +3724,18 @@ function renderCombatantDetail(c, idx, template) {
     html += '</div><div></div>';
   } else {
     html += '<div><div class="detail-section-title">Ad-hoc Combatant</div>';
-    html += '<div style="font-size:0.78rem;color:var(--text-muted)">Lair action, environment effect, or custom entry.</div>';
+    html += '<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.3rem">Lair action, environment effect, or custom entry.</div>';
+    html += '<div id="rollLog-' + idx + '">';
+    if (c.rollLog && c.rollLog.length > 0) {
+      html += '<div class="roll-log">';
+      c.rollLog.forEach(function(entry) {
+        html += '<div class="roll-log-entry ' + (entry.cssClass || '') + '">';
+        html += '<strong>' + entry.label + ':</strong> ' + entry.text;
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
     html += '</div><div></div>';
   }
 
@@ -3525,6 +3846,24 @@ function toggleDescAccordion(idx) {
     toggle.classList.toggle('open');
     body.classList.toggle('open');
   }
+}
+
+function copyCombatField(btn, field) {
+  var combat = getActiveCombat();
+  var text = '';
+  if (field === 'party') {
+    var party = state.parties.find(function(p) { return p.id === combat.partyId; });
+    text = party ? party.name : '';
+  } else {
+    var enc = state.encounters.find(function(e) { return e.id === combat.encounterId; });
+    text = enc ? enc[field] || '' : '';
+  }
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(function() {
+    var orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = orig; }, 1200);
+  });
 }
 
 function copyDescText(btn, type, idx) {
@@ -3872,8 +4211,21 @@ var rollPopupState = null;
 function positionPopup(popup, target) {
   var rect = target.getBoundingClientRect();
   popup.style.display = 'flex';
-  popup.style.left = rect.left + 'px';
-  popup.style.top = (rect.bottom + 4) + 'px';
+  // Measure popup dimensions
+  var pw = popup.offsetWidth;
+  var ph = popup.offsetHeight;
+  var vw = window.innerWidth;
+  var vh = window.innerHeight;
+  // Horizontal: default to button left, shift left if it overflows right edge
+  var left = rect.left;
+  if (left + pw > vw - 8) left = vw - pw - 8;
+  if (left < 8) left = 8;
+  // Vertical: default below button, flip above if it overflows bottom
+  var top = rect.bottom + 4;
+  if (top + ph > vh - 8) top = rect.top - ph - 4;
+  if (top < 8) top = 8;
+  popup.style.left = left + 'px';
+  popup.style.top = top + 'px';
 }
 
 function showRollPopup(evt, rollFnName, combatantIdx, param) {
@@ -3949,6 +4301,25 @@ function rollSavingThrow(combatantIdx, ability, mode) {
   const modeLabel = mode === 'advantage' ? ' (Adv)' : mode === 'disadvantage' ? ' (Dis)' : '';
   if (!c.rollLog) c.rollLog = [];
   c.rollLog.push({ label: ability.toUpperCase() + ' Save' + (st ? ' (prof)' : '') + modeLabel, text: esc(result.text) + ' = ' + result.total, cssClass: '' });
+  saveCombat();
+  renderRollLog(combatantIdx);
+}
+
+function rollSkillCheck(combatantIdx, skillIdx, mode) {
+  var skillName = SKILLS[skillIdx];
+  var c = getActiveCombat().combatants[combatantIdx];
+  var template = getTemplate(c);
+  if (!template) return;
+  var ability = SKILL_ABILITY_MAP[skillName];
+  var skill = template.skills.find(function(s) { return s.name === skillName; });
+  var mod = skill ? skill.bonus : abilityMod(template.abilities[ability]);
+  var notation = '1d20' + (mod >= 0 ? '+' + mod : String(mod));
+  var opts = mode === 'advantage' ? { advantage: true } : mode === 'disadvantage' ? { disadvantage: true } : {};
+  var result = rollDice(notation, opts);
+  var modeLabel = mode === 'advantage' ? ' (Adv)' : mode === 'disadvantage' ? ' (Dis)' : '';
+  var profLabel = skill ? ' (prof)' : '';
+  if (!c.rollLog) c.rollLog = [];
+  c.rollLog.push({ label: skillName + profLabel + modeLabel, text: esc(result.text) + ' = ' + result.total, cssClass: '' });
   saveCombat();
   renderRollLog(combatantIdx);
 }
@@ -4062,12 +4433,14 @@ function applyTurnStartEffects(idx) {
   }
 
   // Condition duration decrement & save reminders
+  c._expiredConditions = [];
   if (c.conditions && c.conditions.length > 0) {
     c.conditions = c.conditions.filter(cond => {
       if (cond.durationType === 'rounds') {
         cond.duration--;
         if (cond.duration <= 0) {
           c.rollLog.push({ label: 'Condition Expired', text: cond.name + ' has worn off', cssClass: '' });
+          c._expiredConditions.push(cond);
           return false;
         }
         c.rollLog.push({ label: 'Condition', text: cond.name + ' - ' + cond.duration + ' round' + (cond.duration !== 1 ? 's' : '') + ' remaining', cssClass: '' });
@@ -4076,6 +4449,27 @@ function applyTurnStartEffects(idx) {
       }
       return true;
     });
+  }
+}
+
+function reverseTurnStartEffects(idx) {
+  var c = getActiveCombat().combatants[idx];
+  // Re-increment round-based condition durations that were decremented on turn start
+  if (c.conditions && c.conditions.length > 0) {
+    c.conditions.forEach(function(cond) {
+      if (cond.durationType === 'rounds') {
+        cond.duration++;
+      }
+    });
+  }
+  // Restore conditions that expired this turn
+  if (c._expiredConditions && c._expiredConditions.length > 0) {
+    c._expiredConditions.forEach(function(cond) {
+      cond.duration = 1; // was 0 after decrement, restore to 1
+      if (!c.conditions) c.conditions = [];
+      c.conditions.push(cond);
+    });
+    c._expiredConditions = [];
   }
 }
 
@@ -4131,7 +4525,10 @@ function prevTurn() {
     autoExpandedId = null;
   }
 
+  // Reverse turn-start effects on the current combatant before moving back
   const startIdx = combat.turnIndex;
+  reverseTurnStartEffects(startIdx);
+
   let prev = startIdx;
   let wrapped = false;
 

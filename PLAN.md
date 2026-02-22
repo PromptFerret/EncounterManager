@@ -326,11 +326,79 @@ Overridden values are highlighted wherever they appear in the detail panel - AC,
 3. Edit mode state (7 transient variables), combat bar toggle, controls lockout
 4. Checkboxes with template locking, row dimming for non-selectable templates
 5. Edit form (`renderEditOverrideForm()`) with revert buttons, conflict detection, save/skill add/remove
-6. Apply/Cancel logic with conflict field preservation, exit edit mode
+6. Save/Close/Cancel logic with dirty tracking (`editFormSnapshot` + `isEditFormDirty()`), conflict field preservation. Save persists and stays open, Close/Cancel warn if dirty.
 7. Single edit shortcut: Edit button on monster detail panel
 8. Visual indicators: override badge on rows, `ovh()` highlight wrapper on all detail panel fields
 9. Per-item save/skill revert: match by name (ability for saves, skill name for skills), deleted items shown struck-through with restore button, added items show revert button (removes them)
 10. Roll mode popup: replaced inline Dis/Adv buttons on attacks, checks, saves, and damage with click-to-popup menus (Dis/Normal/Adv for d20 rolls, Normal/Crit for damage)
+
+## Phase 5.1 - Combat Detail Panel Redesign (done)
+
+Restructured the monster combat detail panel for a D&D Beyond-inspired layout with rollable checks, saves, and skills.
+
+### Left Column (the "what it does" column)
+1. Hit Points (Dmg/Heal/THP) - unchanged
+2. Multiattack - unchanged
+3. **Features** - moved from right column (inline dice, use tracking, recharge all next to roll log)
+4. Attacks - unchanged
+5. Roll Log - unchanged
+
+### Right Column (the "reference + roll" column)
+1. Speed & Senses - moved to top for quick reference
+2. Passives - PP (Passive Perception), PI (Passive Investigation), PIn (Passive Insight)
+3. Attribute grid - 3-column, 2 rows. Each ability: label, check button (score + modifier), save button (bonus). Proficient saves highlighted in accent color.
+4. Skills grid - 3-column, 6 rows. All 18 D&D skills with roll buttons. Proficient skills highlighted in accent color.
+5. Legendary Actions/Resistances - unchanged
+
+### New Code
+- `SKILL_ABILITY_MAP` constant: maps each skill to its governing ability
+- `calcPassiveInvestigation(t)`: 10 + Investigation bonus or INT mod
+- `calcPassiveInsight(t)`: 10 + Insight bonus or WIS mod
+- `rollSkillCheck(cIdx, skillIdx, mode)`: rolls 1d20 + skill bonus (proficient) or ability mod, supports Dis/Normal/Adv via roll popup
+
+### CSS
+- `.attr-grid`, `.attr-cell`, `.attr-label`, `.attr-btn` (with `.proficient` variant)
+- `.attr-sub` (save sub-label between check and save buttons)
+- `.save-btn` (dashed border for non-proficient, solid for proficient)
+- `.skill-grid`, `.skill-cell`, `.skill-label`
+- `.passive-row`, `.passive-label`
+- `.combat-info`, `.combat-info-row`, `.combat-info-label`, `.combat-info-value`, `.combat-info-copy`
+
+### Design
+- Buttons fill grid cells (no floating disconnected buttons)
+- Labels centered above buttons, "save" sub-label between check and save buttons
+- Proficient saves: accent color, solid border. Non-proficient: muted, dashed border.
+- Proficient skills: accent color border and text. Non-proficient: muted style.
+- All numbers in monospace font
+- Override highlighting works on new layout via `ovh()` and per-item comparison against `getRawTemplate()`
+
+### Additional Polish (done)
+
+#### Combat Info Header
+Party name, encounter name, campaign, location, and notes displayed above the initiative tracker. Each field shown as a labeled row with a Copy button for clipboard access. Uses `copyCombatField(btn, field)`. Only renders fields that have content.
+
+#### Color Scheme Swap
+Override markers (highlight, badge, name, edit-field-modified, revert button) changed from purple to yellow (`--warning`). Multiattack box changed from yellow to purple (`--accent`). Ensures overrides are visually distinct from structural elements.
+
+#### Per-Item Override Highlighting
+Saves and skills now compare individual values against `getRawTemplate()` rather than checking `isFieldOverridden()` on the whole array. Only actually modified items get the yellow override marker, not all items in an overridden array.
+
+#### Roll Popup Edge Detection & Stacking
+`positionPopup()` clamps popup within viewport bounds (8px margin). Buttons stack vertically (`flex-direction: column`) for clearer layout.
+
+#### Data Integrity Fixes
+- `deepMerge()` handles sparse object overrides (base=array + override=non-array-object with string numeric keys)
+- `setNestedValue()` creates arrays (not objects) when next path segment is numeric (root cause fix)
+- `ensureArray()` safety net in `getTemplate()` normalizes all array fields after merge
+- Three-layer defense ensures corrupted override data in IndexedDB doesn't crash the combat screen
+
+#### Prev Turn Condition Reversal
+- `reverseTurnStartEffects(idx)` re-increments round-based condition durations when using Prev
+- Expired conditions stashed to `c._expiredConditions` before removal in `applyTurnStartEffects()`
+- `reverseTurnStartEffects()` restores expired conditions from stash with duration=1
+
+#### Ad-hoc Roll Log
+Ad-hoc/lair combatant detail panels now include a roll log container for condition countdown notifications.
 
 ## Future Phases
 
