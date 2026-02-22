@@ -132,7 +132,11 @@ Players show an editable **AC** field and a note that conditions and details are
 
 ## Expanded Detail Panel (Ad-hoc)
 
-Ad-hoc combatants (lair actions, environmental effects) show a label identifying them as custom entries. They have a roll log that displays condition countdown notifications - useful for tracking timed environmental effects (e.g., a lair action that triggers every 3 rounds).
+Ad-hoc combatants (lair actions, environmental effects, destructible objects) show a label identifying them as custom entries. They have a roll log that displays condition countdown notifications - useful for tracking timed environmental effects (e.g., a lair action that triggers every 3 rounds).
+
+If the ad-hoc entry was created with **HP**, the detail panel shows Hit Points with the same **Dmg/Heal/THP** controls as monsters. Damage reduces HP (temp HP absorbs first), healing caps at max HP, and dropping to 0 marks the entry as dead. Useful for destructible objects like doors, siege engines, gates, or defended objectives.
+
+If the entry was created with **AC**, the armor class is displayed in the detail panel and on the initiative row.
 
 ## Common Controls (All Combatants)
 
@@ -148,12 +152,14 @@ Click **+ Add** (available in both initiative setup and active combat) to open t
 
 ### Ad-hoc
 
-For entries with no stats - lair actions, environmental effects, traps, or any custom initiative entry.
+For entries without full stat blocks - lair actions, environmental effects, traps, destructible objects, or any custom initiative entry.
 
 - **Name** - what this entry is called in the initiative list
 - **Initiative** - defaults to 20 in active combat, blank in initiative setup
+- **HP** (optional) - hit points for destructible objects (doors, siege engines, gates). When set, the entry gets a full HP bar and Dmg/Heal/THP controls.
+- **AC** (optional) - armor class. When set, shows in the AC column on the initiative row.
 
-Creates a simple entry that tracks initiative, notes, and conditions. No HP, AC, or attacks.
+Leave HP and AC blank for pure initiative entries (lair actions, environmental effects). Fill them in for things the party can hit or needs to defend.
 
 ### Player
 

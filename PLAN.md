@@ -400,6 +400,23 @@ Saves and skills now compare individual values against `getRawTemplate()` rather
 #### Ad-hoc Roll Log
 Ad-hoc/lair combatant detail panels now include a roll log container for condition countdown notifications.
 
+## Phase 5.2 - Destructible Ad-hoc Combatants (done)
+
+Added optional HP and AC fields to ad-hoc combatants for destructible objects (doors, siege engines, gates, crystal pylons, portals, defended objectives).
+
+### Changes
+- **Add Combatant modal**: Ad-hoc mode now has optional HP and AC inputs alongside Initiative (all on one row)
+- **`doAddCombatant()`**: Reads HP/AC inputs, sets `hpMax`, `currentHp`, `ac` on the combatant when provided
+- **`applyDamage()`/`applyHeal()`**: maxHp resolution changed from `c.currentHp` to `c.hpMax || c.currentHp` for non-template combatants
+- **Combatant row**: Ad-hoc with `hpMax` gets full HP bar (same as monsters); ad-hoc with `ac` shows in AC column
+- **Detail panel**: Ad-hoc with `hpMax` gets HP display + Dmg/Heal/THP controls (same as monsters); `ac` displayed below
+
+### Data
+New optional fields on ad-hoc combatants: `hpMax` (number), `currentHp` (number), `tempHp` (number, on mutation), `ac` (number). All optional - ad-hoc without these behaves identically to before.
+
+### Backward Compatible
+Existing ad-hoc combatants in saved combats have no `hpMax` - no HP controls shown, no HP bar. No migration needed.
+
 ## Future Phases
 
 ### Phase 6 - 5etools Importer

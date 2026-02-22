@@ -2616,9 +2616,15 @@ function showAddCombatantModal() {
     // Ad-hoc mode (default)
     '<div style="display:flex;flex-direction:column;gap:0.5rem">' +
     '<label style="font-size:0.75rem;color:var(--text-muted)">Name</label>' +
-    '<input type="text" id="addCombatantName" placeholder="Lair Actions, Environmental, Traps..." onclick="event.stopPropagation()" style="padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem">' +
-    '<label style="font-size:0.75rem;color:var(--text-muted)">Initiative</label>' +
-    '<input type="number" id="addCombatantInit" value="' + defaultInit + '" step="0.01" placeholder="Init" onclick="event.stopPropagation()" style="width:80px;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem;font-family:var(--mono)">' +
+    '<input type="text" id="addCombatantName" placeholder="Lair Actions, Doors, Siege Engines..." onclick="event.stopPropagation()" style="padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem">' +
+    '<div style="display:flex;gap:0.75rem;align-items:flex-end">' +
+    '<div><label style="font-size:0.75rem;color:var(--text-muted)">Initiative</label>' +
+    '<input type="number" id="addCombatantInit" value="' + defaultInit + '" step="0.01" placeholder="Init" onclick="event.stopPropagation()" style="width:80px;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem;font-family:var(--mono);display:block"></div>' +
+    '<div><label style="font-size:0.75rem;color:var(--text-muted)">HP <span style="color:var(--text-dim)">(optional)</span></label>' +
+    '<input type="number" id="addCombatantHP" min="1" placeholder="-" onclick="event.stopPropagation()" style="width:80px;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem;font-family:var(--mono);display:block"></div>' +
+    '<div><label style="font-size:0.75rem;color:var(--text-muted)">AC <span style="color:var(--text-dim)">(optional)</span></label>' +
+    '<input type="number" id="addCombatantAdhocAC" placeholder="-" onclick="event.stopPropagation()" style="width:60px;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem;font-family:var(--mono);display:block"></div>' +
+    '</div>' +
     '</div>' +
     '</div>' +
     '<div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:1rem">' +
@@ -2647,9 +2653,15 @@ function switchAddMode(mode) {
     body.innerHTML =
       '<div style="display:flex;flex-direction:column;gap:0.5rem">' +
       '<label style="font-size:0.75rem;color:var(--text-muted)">Name</label>' +
-      '<input type="text" id="addCombatantName" placeholder="Lair Actions, Environmental, Traps..." onclick="event.stopPropagation()" style="' + inputStyle + '">' +
-      '<label style="font-size:0.75rem;color:var(--text-muted)">Initiative</label>' +
-      '<input type="number" id="addCombatantInit" value="' + defaultInit + '" step="0.01" placeholder="Init" onclick="event.stopPropagation()" style="width:80px;' + monoStyle + '">' +
+      '<input type="text" id="addCombatantName" placeholder="Lair Actions, Doors, Siege Engines..." onclick="event.stopPropagation()" style="' + inputStyle + '">' +
+      '<div style="display:flex;gap:0.75rem;align-items:flex-end">' +
+      '<div><label style="font-size:0.75rem;color:var(--text-muted)">Initiative</label>' +
+      '<input type="number" id="addCombatantInit" value="' + defaultInit + '" step="0.01" placeholder="Init" onclick="event.stopPropagation()" style="width:80px;' + monoStyle + ';display:block"></div>' +
+      '<div><label style="font-size:0.75rem;color:var(--text-muted)">HP <span style="color:var(--text-dim)">(optional)</span></label>' +
+      '<input type="number" id="addCombatantHP" min="1" placeholder="-" onclick="event.stopPropagation()" style="width:80px;' + monoStyle + ';display:block"></div>' +
+      '<div><label style="font-size:0.75rem;color:var(--text-muted)">AC <span style="color:var(--text-dim)">(optional)</span></label>' +
+      '<input type="number" id="addCombatantAdhocAC" placeholder="-" onclick="event.stopPropagation()" style="width:60px;' + monoStyle + ';display:block"></div>' +
+      '</div>' +
       '</div>';
     setTimeout(function() { var el = document.getElementById('addCombatantName'); if (el) el.focus(); }, 50);
   } else if (mode === 'player') {
@@ -2755,13 +2767,20 @@ function doAddCombatant() {
     if (!name) { setStatus('Enter a combatant name.', 'error'); return; }
     const initEl = document.getElementById('addCombatantInit');
     const init = initEl && initEl.value !== '' ? +initEl.value : 20.0;
-    combat.combatants.push({
+    const hpEl = document.getElementById('addCombatantHP');
+    const hp = hpEl && hpEl.value !== '' ? Math.max(1, parseInt(hpEl.value) || 0) : null;
+    const acEl = document.getElementById('addCombatantAdhocAC');
+    const acVal = acEl && acEl.value !== '' ? parseInt(acEl.value) || 0 : null;
+    var entry = {
       id: uuid(),
       name: name,
       type: 'adhoc',
       init: init,
       notes: ''
-    });
+    };
+    if (hp !== null) { entry.hpMax = hp; entry.currentHp = hp; }
+    if (acVal !== null) { entry.ac = acVal; }
+    combat.combatants.push(entry);
     setStatus('Added: ' + name, 'success');
   }
 
@@ -3463,13 +3482,25 @@ function renderActiveCombat(el) {
       html += '<span class="ac-val">' + ovh(c, 'ac', '' + template.ac) + '</span>';
     } else if (c.type === 'player' && c.ac) {
       html += '<span class="ac-val">' + c.ac + '</span>';
+    } else if (c.type === 'adhoc' && c.ac) {
+      html += '<span class="ac-val">' + c.ac + '</span>';
     } else {
       html += '<span class="ac-val"></span>';
     }
 
-    // HP bar (monsters only)
+    // HP bar (monsters and ad-hoc with HP)
     if (c.type === 'monster' && template) {
       const maxHp = template.hpMax;
+      const curHp = c.currentHp !== undefined ? c.currentHp : maxHp;
+      const tempHp = c.tempHp || 0;
+      const pct = maxHp > 0 ? Math.max(0, Math.min(100, Math.round((curHp / maxHp) * 100))) : 0;
+      const hpClass = pct > 50 ? 'hp-high' : pct > 25 ? 'hp-mid' : 'hp-low';
+      html += '<div class="hp-bar-container">';
+      html += '<div class="hp-bar-fill ' + hpClass + '" style="width:' + pct + '%"></div>';
+      html += '<span class="hp-bar-text">' + curHp + (tempHp > 0 ? '+' + tempHp : '') + '/' + maxHp + '</span>';
+      html += '</div>';
+    } else if (c.type === 'adhoc' && c.hpMax) {
+      const maxHp = c.hpMax;
       const curHp = c.currentHp !== undefined ? c.currentHp : maxHp;
       const tempHp = c.tempHp || 0;
       const pct = maxHp > 0 ? Math.max(0, Math.min(100, Math.round((curHp / maxHp) * 100))) : 0;
@@ -3725,6 +3756,28 @@ function renderCombatantDetail(c, idx, template) {
   } else {
     html += '<div><div class="detail-section-title">Ad-hoc Combatant</div>';
     html += '<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.3rem">Lair action, environment effect, or custom entry.</div>';
+    // HP controls (if hpMax set)
+    if (c.hpMax) {
+      var maxHp = c.hpMax;
+      var curHp = c.currentHp !== undefined ? c.currentHp : maxHp;
+      var tempHp = c.tempHp || 0;
+      html += '<div class="detail-section-title">Hit Points</div>';
+      html += '<div style="font-family:var(--mono);font-size:0.82rem;margin-bottom:0.3rem">';
+      html += '<strong>' + curHp + '</strong> / ' + maxHp;
+      if (tempHp > 0) html += ' <span style="color:var(--accent)">(+' + tempHp + ' temp)</span>';
+      html += '</div>';
+      html += '<div class="hp-controls">';
+      html += '<input type="number" id="hpInput-' + idx + '" placeholder="0" min="0" onclick="event.stopPropagation()">';
+      html += '<button class="btn-sm btn-danger" onclick="event.stopPropagation();applyDamage(' + idx + ')">Dmg</button>';
+      html += '<button class="btn-sm btn-success" onclick="event.stopPropagation();applyHeal(' + idx + ')">Heal</button>';
+      html += '<button class="btn-sm btn-warning" onclick="event.stopPropagation();applyTempHp(' + idx + ')">THP</button>';
+      html += '</div>';
+    }
+    // AC display (if set)
+    if (c.ac) {
+      html += '<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.3rem"><strong>AC</strong> ' + c.ac + '</div>';
+    }
+    // Roll log
     html += '<div id="rollLog-' + idx + '">';
     if (c.rollLog && c.rollLog.length > 0) {
       html += '<div class="roll-log">';
@@ -4021,7 +4074,7 @@ function applyDamage(idx) {
 
   const c = getActiveCombat().combatants[idx];
   const template = getTemplate(c);
-  const maxHp = template ? template.hpMax : c.currentHp;
+  const maxHp = template ? template.hpMax : (c.hpMax || c.currentHp);
 
   // THP absorbs first
   let tempHp = c.tempHp || 0;
@@ -4062,7 +4115,7 @@ function applyHeal(idx) {
 
   const c = getActiveCombat().combatants[idx];
   const template = getTemplate(c);
-  const maxHp = template ? template.hpMax : c.currentHp;
+  const maxHp = template ? template.hpMax : (c.hpMax || c.currentHp);
   let curHp = c.currentHp !== undefined ? c.currentHp : maxHp;
   curHp = Math.min(curHp + heal, maxHp);
   c.currentHp = curHp;
