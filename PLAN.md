@@ -458,9 +458,56 @@ Three helpers extracted: `getCombatantHp(c, template)` resolves maxHp consistent
 #### 6.7 - CSS Consolidation (done)
 8 utility classes added: `.flex-row`, `.flex-row-tight`, `.flex-row-end`, `.flex-col`, `.text-muted-sm`, `.text-dim-sm`, `.text-mono`, `.detail-label`. 22 inline style patterns replaced. One-off styles left inline.
 
+### Phase 7 - 5etools Importer (done)
+
+Implemented complete 5etools JSON import pipeline:
+- Tag stripper (`strip5eToolsTags`) handling 20+ tag types with nested tag support
+- Recursive entry flattener (`flattenEntries`) for structured entries (lists, items, tables)
+- Field parsers: size, type, AC, speed, saves, skills, CR, resistances/immunities, alignment, initiative
+- Action parser splits attacks/multiattack/features, extracts hit bonus, reach/range, damage dice+types
+- Legendary action parser with continuation merging (handles MCDM villain action format)
+- Spellcasting → features converter (at-will, daily, slots, recharge)
+- LR extraction from traits
+- Import modal toggle group UI (SquishText | 5etools) matching Add Combatant pattern
+- Format auto-detection in SquishText mode (routes 5etools JSON to correct parser)
+- Name-based dedup for 5etools imports
+
+Bug fixes during testing:
+- Speed: hover duplication when both `canHover` and `condition: "(hover)"` present
+- Condition immunities: `|source` tags now stripped (e.g., `"dazed|FleeMortals"` → `"Dazed"`)
+- Attack notes: both reach and range captured (e.g., `"reach 15 ft. or range 600 ft."`)
+- Legendary continuations: entries without `Action N:` or `(Costs N Actions)` merged into previous action
+- Recharge abilities: `usesMax` set to 1 so Use/Restore/Roll Recharge buttons appear
+- Detail panel: `grid-template-columns: 1fr auto` → `1fr minmax(0, 320px)` to prevent right column domination
+- Legendary actions/resistances moved from right column to left column for better readability
+
 ## Future Phases
 
-### Phase 7 - 5etools Importer
+### Phase 7.x - Villain Actions & Import Refinements
+
+Discovered during 5etools import testing with complex creatures. These are schema/UI additions needed to properly support the full range of 5etools monster data.
+
+**Status: Gathering requirements** — testing more monsters before implementing to find additional gaps.
+
+#### 7.x.1 - Import Testing Tracker
+
+Non-standard action economies (MCDM villain actions, Drakkenheim epic actions, etc.) are imported as features or legendary actions. The DM is expected to understand their creatures' rules — the importer captures the data faithfully.
+
+Tested so far: Goblin Warrior (CR 1/4), Scion of Memnor (CR 26), Xogomoc (CR 30, MCDM villain actions), The World Ender (CR 30, Drakkenheim epic actions).
+
+- [ ] Spellcasting creatures (Vampire, Lich, etc.)
+- [ ] Mythic creatures (Tiamat-style)
+- [ ] Creatures with multiple AC forms (shapeshifters)
+- [x] Creatures with special HP (scaling) — The World Ender: hpMax:0, formula stores special text
+- [x] `|source` tags on conditions — fixed (strip before `|`)
+- [x] Dual reach+range attacks — fixed (both captured)
+- [x] Legendary action continuations — fixed (merged into previous)
+- [x] Recharge abilities missing Use button — fixed (usesMax: 1)
+- [x] Hover duplication in speed — fixed (condition takes priority over canHover flag)
+
+---
+
+#### Phase 7 Reference Documentation
 
 #### Importer Architecture Pattern (applies to all future importers)
 

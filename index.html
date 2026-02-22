@@ -3173,7 +3173,7 @@ function isSaveItemModified(idx) {
   const save = editState.formData.savingThrows[idx];
   if (!save) return false;
   const ts = editState.rawTemplate.savingThrows.find(function(s) { return s.ability === save.ability; });
-  if (!ts) return true; // added item — not in template
+  if (!ts) return true; // added item - not in template
   return ts.bonus !== save.bonus;
 }
 function revertSaveItem(idx) {
@@ -3181,7 +3181,7 @@ function revertSaveItem(idx) {
   if (!save) return;
   const ts = editState.rawTemplate.savingThrows.find(function(s) { return s.ability === save.ability; });
   if (ts) editState.formData.savingThrows[idx] = deepClone(ts);
-  else editState.formData.savingThrows.splice(idx, 1); // added item — remove it
+  else editState.formData.savingThrows.splice(idx, 1); // added item - remove it
   renderEditOverrideForm();
 }
 function restoreDeletedSave(ability) {
@@ -3195,7 +3195,7 @@ function isSkillItemModified(idx) {
   const skill = editState.formData.skills[idx];
   if (!skill) return false;
   const ts = editState.rawTemplate.skills.find(function(s) { return s.name === skill.name; });
-  if (!ts) return true; // added item — not in template
+  if (!ts) return true; // added item - not in template
   return ts.bonus !== skill.bonus;
 }
 function revertSkillItem(idx) {
@@ -3203,7 +3203,7 @@ function revertSkillItem(idx) {
   if (!skill) return;
   const ts = editState.rawTemplate.skills.find(function(s) { return s.name === skill.name; });
   if (ts) editState.formData.skills[idx] = deepClone(ts);
-  else editState.formData.skills.splice(idx, 1); // added item — remove it
+  else editState.formData.skills.splice(idx, 1); // added item - remove it
   renderEditOverrideForm();
 }
 function restoreDeletedSkill(name) {
@@ -3314,7 +3314,7 @@ function renderEditOverrideForm() {
   const d = editState.formData;
   let html = '';
 
-  html += '<div class="form-section"><div class="form-section-title">Editing ' + editState.selected.length + ' combatant' + (editState.selected.length !== 1 ? 's' : '') + ' — ' + esc(editState.rawTemplate.name) + '</div></div>';
+  html += '<div class="form-section"><div class="form-section-title">Editing ' + editState.selected.length + ' combatant' + (editState.selected.length !== 1 ? 's' : '') + ' - ' + esc(editState.rawTemplate.name) + '</div></div>';
 
   // ── Basic Info ──
   html += '<div class="form-section"><div class="form-section-title">Basic Info</div>';
@@ -5051,10 +5051,10 @@ function flattenEntries(entries) {
   if (!entries) return '';
   if (typeof entries === 'string') return strip5eToolsTags(entries);
   if (!Array.isArray(entries)) {
-    if (entries.entries) return flattenEntries(entries.entries);
-    if (entries.type === 'item' && entries.name) {
-      return entries.name + '. ' + flattenEntries(entries.entries || []);
+    if ((entries.type === 'item' || entries.type === 'itemSub') && entries.name) {
+      return entries.name + '. ' + flattenEntries(entries.entry || entries.entries || []);
     }
+    if (entries.entries) return flattenEntries(entries.entries);
     if (entries.type === 'list' && entries.items) {
       return entries.items.map(function(item) { return flattenEntries(item); }).join('\n');
     }
@@ -5199,6 +5199,30 @@ function parse5eResist(arr) {
 function parse5eAlignment(align) {
   if (!align || !Array.isArray(align)) return '';
   const map = { L: 'Lawful', N: 'Neutral', NX: 'Neutral', NY: 'Neutral', C: 'Chaotic', G: 'Good', E: 'Evil', U: 'Unaligned', A: 'Any' };
+  // Detect alignment ranges: if all entries are strings, check for axis patterns
+  const allStrings = align.every(function(a) { return typeof a === 'string'; });
+  if (allStrings) {
+    const codes = align;
+    const lawAxis = codes.filter(function(c) { return c === 'L' || c === 'NX' || c === 'C'; });
+    const moralAxis = codes.filter(function(c) { return c === 'G' || c === 'NY' || c === 'E'; });
+    // "Any alignment" patterns
+    if (codes.indexOf('A') !== -1) return 'Any Alignment';
+    if (codes.indexOf('U') !== -1) return 'Unaligned';
+    // Full axis range (L+NX+C or G+NY+E) = "Any" on that axis
+    const anyLaw = lawAxis.length === 3;
+    const anyMoral = moralAxis.length === 3;
+    if (anyLaw && anyMoral) return 'Any Alignment';
+    if (anyLaw && moralAxis.length === 1) return 'Any ' + map[moralAxis[0]];
+    if (anyMoral && lawAxis.length === 1) return map[lawAxis[0]] + ' Any';
+    // Partial ranges (e.g. L+NX = "Lawful or Neutral")
+    if (lawAxis.length > 1 || moralAxis.length > 1) {
+      const lawPart = lawAxis.length > 0 ? lawAxis.map(function(c) { return map[c]; }).join(' or ') : '';
+      const moralPart = moralAxis.length > 0 ? moralAxis.map(function(c) { return map[c]; }).join(' or ') : '';
+      if (lawPart && moralPart) return lawPart + ' ' + moralPart;
+      return lawPart || moralPart;
+    }
+  }
+  // Standard case: simple concatenation
   const parts = [];
   align.forEach(function(a) {
     if (typeof a === 'string') parts.push(map[a] || a);
@@ -5354,14 +5378,16 @@ function parse5eActions(actionArr) {
 
 function parse5eLegendary(legArr) {
   if (!legArr || !Array.isArray(legArr)) return [];
+  // Only merge continuations if the array uses "Action N:" naming (MCDM villain style)
+  const usesActionPrefix = legArr.some(function(la) { return la.name && /^Action\s+\d+:/i.test(la.name); });
   const actions = [];
   legArr.forEach(function(la) {
     if (!la.name) return; // Skip header/intro text entries
-    const costMatch = la.name.match(/\(Costs?\s+(\d+)\s+Actions?\)/i);
+    const costMatch = la.name.match(/\((?:Costs?\s+)?(\d+)\s+Actions?\)/i);
     const isNumberedAction = /^Action\s+\d+:/i.test(la.name);
     const desc = strip5eToolsTags(flattenEntries(la.entries || []));
-    if (!costMatch && !isNumberedAction && actions.length > 0) {
-      // Continuation entry - merge into previous action
+    if (usesActionPrefix && !costMatch && !isNumberedAction && actions.length > 0) {
+      // Continuation entry - merge into previous action (only in "Action N:" mode)
       const prev = actions[actions.length - 1];
       prev.desc += '\n\n' + strip5eToolsTags(la.name) + ': ' + desc;
     } else {
@@ -5557,7 +5583,7 @@ function import5etools(json) {
       damageImmunities: parse5eResist(m.immune),
       damageVulnerabilities: parse5eResist(m.vulnerable),
       conditionImmunities: parse5eResist(m.conditionImmune),
-      senses: m.senses ? m.senses.join(', ') : '',
+      senses: m.senses ? strip5eToolsTags(m.senses.join(', ')) : '',
       passivePerception: typeof m.passive === 'number' ? m.passive : null,
       languages: m.languages ? m.languages.join(', ') : '',
       tactics: '',
@@ -5730,7 +5756,8 @@ function switchImportMode(mode) {
       '<textarea id="importPasteInput" rows="6" placeholder="Paste 5etools JSON here..." style="width:100%;margin-bottom:0.75rem;font-family:var(--mono);' + inputStyle + '"></textarea>' +
       '<p class="text-muted-sm" style="margin-bottom:0.5rem">Or select .json files:</p>' +
       '<input type="file" id="importFileInput" accept=".json" multiple style="margin-bottom:1rem;font-size:0.8rem;color:var(--text)">' +
-      '<p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:1rem">Accepts single creatures or bestiary files with a "monster" array. Duplicates skipped by name.</p>';
+      '<p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.75rem">Accepts single creatures or bestiary files with a "monster" array. Duplicates skipped by name.</p>' +
+      '<p style="font-size:0.7rem;color:var(--text-dim);margin-bottom:0;font-style:italic">Note: 5etools data varies widely in structure. Always review imported creatures and fix any issues - especially complex abilities like Mythic, Villain, or Epic Actions, which are best added as notes in the feature description.</p>';
   }
 }
 
