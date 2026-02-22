@@ -619,7 +619,7 @@
   .combatant-detail.expanded { display: block; }
   .detail-grid {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr minmax(0, 320px);
     gap: 0.75rem;
   }
   .detail-section-title {
@@ -5012,6 +5012,579 @@ function endCombat() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ── 5etools Importer ──
+// ═══════════════════════════════════════════════════════════════
+
+const SIZE_MAP = { F: 'Fine', D: 'Diminutive', T: 'Tiny', S: 'Small', M: 'Medium', L: 'Large', H: 'Huge', G: 'Gargantuan', C: 'Colossal', V: 'Varies' };
+
+function strip5eToolsTags(text) {
+  if (typeof text !== 'string') return String(text || '');
+  let s = text;
+  let safety = 20;
+  while (s.indexOf('{@') !== -1 && safety-- > 0) {
+    s = s.replace(/\{@([\w]+)\s*([^{}]*)\}/g, function(match, tag, content) {
+      tag = tag.toLowerCase();
+      if (tag === 'h') return 'Hit: ';
+      if (tag === 'atkr' || tag === 'atk') return '';
+      if (tag === 'hit') return '+' + content.trim();
+      if (tag === 'dc') return 'DC ' + content.trim();
+      if (tag === 'recharge') {
+        const n = content.trim();
+        return n ? '(Recharge ' + n + '-6)' : '(Recharge 6)';
+      }
+      if (tag === 'damage' || tag === 'dice') return content.split('|')[0].trim();
+      if (tag === 'actsave') {
+        const ab = content.trim().toLowerCase();
+        return (ABILITY_NAMES[ab] || ab.charAt(0).toUpperCase() + ab.slice(1)) + ' saving throw';
+      }
+      if (tag === 'actsavefail') return 'Failure:';
+      if (tag === 'actsavesuccess') return 'Success:';
+      if (tag === 'actsavesuccessorfail') return 'Success or Failure:';
+      // Reference tags: take first segment before |
+      return content.split('|')[0].trim();
+    });
+  }
+  return s.trim();
+}
+
+function flattenEntries(entries) {
+  if (!entries) return '';
+  if (typeof entries === 'string') return strip5eToolsTags(entries);
+  if (!Array.isArray(entries)) {
+    if (entries.entries) return flattenEntries(entries.entries);
+    if (entries.type === 'item' && entries.name) {
+      return entries.name + '. ' + flattenEntries(entries.entries || []);
+    }
+    if (entries.type === 'list' && entries.items) {
+      return entries.items.map(function(item) { return flattenEntries(item); }).join('\n');
+    }
+    if (entries.type === 'table') {
+      let t = entries.caption ? entries.caption + ':\n' : '';
+      if (entries.colLabels) t += entries.colLabels.join(' | ') + '\n';
+      if (entries.rows) entries.rows.forEach(function(row) {
+        t += row.map(function(cell) { return flattenEntries(cell); }).join(' | ') + '\n';
+      });
+      return strip5eToolsTags(t.trim());
+    }
+    if (typeof entries === 'object') return JSON.stringify(entries);
+    return String(entries);
+  }
+  return entries.map(function(e) { return flattenEntries(e); }).filter(Boolean).join('\n');
+}
+
+function parse5eSize(sizeArr) {
+  if (!sizeArr || !Array.isArray(sizeArr)) return 'Medium';
+  return sizeArr.map(function(s) { return SIZE_MAP[s] || s; }).join('/');
+}
+
+function parse5eType(type) {
+  if (!type) return '';
+  if (typeof type === 'string') return type.charAt(0).toUpperCase() + type.slice(1);
+  if (type.type) {
+    const base = typeof type.type === 'string' ? type.type : '';
+    return base.charAt(0).toUpperCase() + base.slice(1);
+  }
+  return '';
+}
+
+function parse5eAc(acArr) {
+  if (!acArr || !Array.isArray(acArr) || acArr.length === 0) return { ac: 10, acNote: '' };
+  const first = acArr[0];
+  if (typeof first === 'number') return { ac: first, acNote: '' };
+  if (first.special) return { ac: 10, acNote: strip5eToolsTags(first.special) };
+  const ac = first.ac || 10;
+  let note = '';
+  if (first.from && Array.isArray(first.from)) {
+    note = first.from.map(function(f) { return strip5eToolsTags(f); }).join(', ');
+  }
+  if (first.condition) note = (note ? note + ' ' : '') + strip5eToolsTags(first.condition);
+  return { ac: ac, acNote: note };
+}
+
+function parse5eSpeed(speed) {
+  if (!speed) return '30 ft.';
+  if (typeof speed === 'number') return speed + ' ft.';
+  if (typeof speed === 'string') return speed;
+  const parts = [];
+  const order = ['walk', 'burrow', 'climb', 'fly', 'swim'];
+  order.forEach(function(mode) {
+    const val = speed[mode];
+    if (val === undefined || val === null || val === false || val === 0) return;
+    let num;
+    if (typeof val === 'number') num = val;
+    else if (typeof val === 'object' && val.number) num = val.number;
+    else if (val === true) num = null; // "equal to walking speed"
+    else return;
+    let str = '';
+    if (mode === 'walk') str = (num || '?') + ' ft.';
+    else str = mode + ' ' + (num || '?') + ' ft.';
+    if (typeof val === 'object' && val.condition) str += ' ' + strip5eToolsTags(val.condition);
+    else if (mode === 'fly' && speed.canHover) str += ' (hover)';
+    parts.push(str);
+  });
+  // Alternate speeds
+  if (speed.alternate) {
+    Object.keys(speed.alternate).forEach(function(mode) {
+      speed.alternate[mode].forEach(function(alt) {
+        if (alt.number) {
+          let str = mode === 'walk' ? alt.number + ' ft.' : mode + ' ' + alt.number + ' ft.';
+          if (alt.condition) str += ' ' + strip5eToolsTags(alt.condition);
+          parts.push(str);
+        }
+      });
+    });
+  }
+  return parts.join(', ') || '0 ft.';
+}
+
+function parse5eSaves(saveObj) {
+  if (!saveObj) return [];
+  return Object.keys(saveObj).map(function(ab) {
+    const val = saveObj[ab];
+    const bonus = parseInt(String(val).replace('+', ''), 10);
+    return { ability: ab.toLowerCase(), bonus: isNaN(bonus) ? 0 : bonus };
+  });
+}
+
+function parse5eSkills(skillObj) {
+  if (!skillObj) return [];
+  const skills = [];
+  Object.keys(skillObj).forEach(function(name) {
+    if (name === 'other') return; // skip conditional skills
+    const val = skillObj[name];
+    const bonus = parseInt(String(val).replace('+', ''), 10);
+    // Capitalize skill name properly
+    const capName = name.replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+    skills.push({ name: capName, bonus: isNaN(bonus) ? 0 : bonus });
+  });
+  return skills;
+}
+
+function parse5eCr(cr) {
+  if (!cr) return '';
+  if (typeof cr === 'string') return cr;
+  if (cr.cr) return cr.cr;
+  return '';
+}
+
+function parse5eResist(arr) {
+  if (!arr || !Array.isArray(arr)) return '';
+  const parts = [];
+  arr.forEach(function(entry) {
+    if (typeof entry === 'string') {
+      const clean = entry.indexOf('|') !== -1 ? entry.split('|')[0] : entry;
+      parts.push(clean.charAt(0).toUpperCase() + clean.slice(1));
+    } else if (entry.special) {
+      parts.push(strip5eToolsTags(entry.special));
+    } else {
+      // Conditional: { resist/immune/vulnerable: [...], note: "..." }
+      const key = entry.resist || entry.immune || entry.vulnerable || entry.conditionImmune || [];
+      const types = key.map(function(t) {
+        if (typeof t === 'string') {
+          const clean = t.indexOf('|') !== -1 ? t.split('|')[0] : t;
+          return clean.charAt(0).toUpperCase() + clean.slice(1);
+        }
+        return strip5eToolsTags(JSON.stringify(t));
+      });
+      let text = '';
+      if (entry.preNote) text += strip5eToolsTags(entry.preNote) + ' ';
+      text += types.join(', ');
+      if (entry.note) text += ' ' + strip5eToolsTags(entry.note);
+      parts.push(text.trim());
+    }
+  });
+  return parts.join(', ');
+}
+
+function parse5eAlignment(align) {
+  if (!align || !Array.isArray(align)) return '';
+  const map = { L: 'Lawful', N: 'Neutral', NX: 'Neutral', NY: 'Neutral', C: 'Chaotic', G: 'Good', E: 'Evil', U: 'Unaligned', A: 'Any' };
+  const parts = [];
+  align.forEach(function(a) {
+    if (typeof a === 'string') parts.push(map[a] || a);
+    else if (a.special) parts.push(strip5eToolsTags(a.special));
+    else if (a.alignment) parts.push(a.alignment.map(function(c) { return map[c] || c; }).join(' '));
+  });
+  return parts.join(' ');
+}
+
+function profBonusFromCr(crStr) {
+  if (!crStr) return 2;
+  let cr;
+  if (crStr.indexOf('/') !== -1) cr = 0;
+  else cr = parseInt(crStr, 10);
+  if (isNaN(cr) || cr <= 4) return 2;
+  if (cr <= 8) return 3;
+  if (cr <= 12) return 4;
+  if (cr <= 16) return 5;
+  if (cr <= 20) return 6;
+  if (cr <= 24) return 7;
+  if (cr <= 28) return 8;
+  return 9;
+}
+
+function parse5eInitiative(init, dexScore, crStr) {
+  const dexMod = Math.floor(((dexScore || 10) - 10) / 2);
+  if (init === undefined || init === null) return { initBonus: dexMod, initAdvantage: false };
+  if (typeof init === 'number') return { initBonus: init, initAdvantage: false };
+  if (typeof init === 'object') {
+    let bonus = dexMod;
+    if (init.initiative !== undefined) bonus = init.initiative;
+    else if (init.proficiency) bonus = dexMod + init.proficiency * profBonusFromCr(crStr);
+    const adv = init.advantageMode === 'adv';
+    return { initBonus: bonus, initAdvantage: adv };
+  }
+  return { initBonus: dexMod, initAdvantage: false };
+}
+
+function extractRechargeFromName(name) {
+  let recharge = null;
+  let usesMax = null;
+  let cleanName = name;
+  // {recharge N} or (Recharge N-6)
+  const rechargeTag = cleanName.match(/\{@recharge\s*(\d*)}/i);
+  if (rechargeTag) {
+    recharge = rechargeTag[1] ? rechargeTag[1] + '-6' : '6';
+    cleanName = cleanName.replace(rechargeTag[0], '').trim();
+  }
+  const rechargeParen = cleanName.match(/\(Recharge\s+(\d+)(?:-6)?\)/i);
+  if (rechargeParen) {
+    recharge = rechargeParen[1] + '-6';
+    cleanName = cleanName.replace(rechargeParen[0], '').trim();
+  }
+  // (N/Day) or (1/Round)
+  const usesMatch = cleanName.match(/\((\d+)\/Day\)/i);
+  if (usesMatch) {
+    usesMax = parseInt(usesMatch[1], 10);
+    cleanName = cleanName.replace(usesMatch[0], '').trim();
+  }
+  const restMatch = cleanName.match(/\(Recharges after a (?:Short or )?Long Rest\)/i);
+  if (restMatch) {
+    usesMax = 1;
+    cleanName = cleanName.replace(restMatch[0], '').trim();
+  }
+  return { cleanName: cleanName, recharge: recharge, usesMax: usesMax };
+}
+
+function parse5eActions(actionArr) {
+  const attacks = [];
+  const features = [];
+  let multiattack = '';
+
+  if (!actionArr || !Array.isArray(actionArr)) return { attacks: attacks, features: features, multiattack: multiattack };
+
+  actionArr.forEach(function(action) {
+    if (!action || !action.name) return;
+    const rawName = action.name;
+    const entryText = flattenEntries(action.entries || []);
+    const rawEntryText = (action.entries || []).map(function(e) { return typeof e === 'string' ? e : flattenEntries(e); }).join(' ');
+
+    // Multiattack detection
+    if (rawName.toLowerCase().indexOf('multiattack') === 0) {
+      multiattack = strip5eToolsTags(entryText);
+      return;
+    }
+
+    // Attack detection: check raw text for attack tags
+    const isAttack = rawEntryText.indexOf('{@atkr') !== -1 ||
+                     rawEntryText.indexOf('{@atk ') !== -1 ||
+                     rawEntryText.indexOf('{@hit') !== -1;
+
+    if (isAttack) {
+      // Parse attack
+      const hitMatch = rawEntryText.match(/\{@hit\s+(\d+)\}/);
+      const bonus = hitMatch ? parseInt(hitMatch[1], 10) : 0;
+
+      // Extract name - strip parentheticals like "(Wolf Form Only)"
+      let attackName = strip5eToolsTags(rawName);
+      let attackNote = '';
+      const parenMatch = attackName.match(/\s*\(([^)]+)\)\s*$/);
+      if (parenMatch) {
+        attackNote = parenMatch[1];
+        attackName = attackName.replace(parenMatch[0], '').trim();
+      }
+
+      // Extract reach/range for note
+      const reachMatch = entryText.match(/reach\s+\d+\s*ft\./i);
+      const rangeMatch = entryText.match(/range\s+[\d/]+\s*ft\./i);
+      if (reachMatch && rangeMatch) {
+        attackNote = (attackNote ? attackNote + ', ' : '') + reachMatch[0] + ' or ' + rangeMatch[0];
+      } else if (reachMatch) {
+        attackNote = (attackNote ? attackNote + ', ' : '') + reachMatch[0];
+      } else if (rangeMatch) {
+        attackNote = (attackNote ? attackNote + ', ' : '') + rangeMatch[0];
+      }
+
+      // Extract damages
+      const damages = [];
+      const dmgPattern = /(\d+d\d+(?:\s*[+\-]\s*\d+)?)\)?\s*(\w+)\s*damage/gi;
+      let dmgMatch;
+      const strippedEntry = strip5eToolsTags(rawEntryText);
+      while ((dmgMatch = dmgPattern.exec(strippedEntry)) !== null) {
+        const dice = dmgMatch[1].replace(/\s/g, '');
+        const type = dmgMatch[2].charAt(0).toUpperCase() + dmgMatch[2].slice(1);
+        damages.push({ dice: dice, type: type, note: '' });
+      }
+
+      // If no damages found, try simpler extraction
+      if (damages.length === 0) {
+        const simpleDmg = strippedEntry.match(/(\d+)\s*\((\d+d\d+(?:\s*[+\-]\s*\d+)?)\)/);
+        if (simpleDmg) {
+          damages.push({ dice: simpleDmg[2].replace(/\s/g, ''), type: '', note: '' });
+        }
+      }
+
+      attacks.push({ name: attackName, bonus: bonus, note: attackNote, damages: damages });
+    } else {
+      // Non-attack action -> feature
+      const extracted = extractRechargeFromName(strip5eToolsTags(rawName));
+      features.push({
+        name: extracted.cleanName,
+        desc: strip5eToolsTags(entryText),
+        recharge: extracted.recharge,
+        usesMax: extracted.usesMax
+      });
+    }
+  });
+
+  return { attacks: attacks, features: features, multiattack: multiattack };
+}
+
+function parse5eLegendary(legArr) {
+  if (!legArr || !Array.isArray(legArr)) return [];
+  const actions = [];
+  legArr.forEach(function(la) {
+    if (!la.name) return; // Skip header/intro text entries
+    const costMatch = la.name.match(/\(Costs?\s+(\d+)\s+Actions?\)/i);
+    const isNumberedAction = /^Action\s+\d+:/i.test(la.name);
+    const desc = strip5eToolsTags(flattenEntries(la.entries || []));
+    if (!costMatch && !isNumberedAction && actions.length > 0) {
+      // Continuation entry - merge into previous action
+      const prev = actions[actions.length - 1];
+      prev.desc += '\n\n' + strip5eToolsTags(la.name) + ': ' + desc;
+    } else {
+      const cost = costMatch ? parseInt(costMatch[1], 10) : 1;
+      let name = strip5eToolsTags(la.name);
+      if (costMatch) name = name.replace(costMatch[0], '').trim();
+      actions.push({ name: name, cost: cost, desc: desc });
+    }
+  });
+  return actions;
+}
+
+function parse5eSpellcasting(spellArr) {
+  if (!spellArr || !Array.isArray(spellArr)) return [];
+  const features = [];
+  spellArr.forEach(function(sc) {
+    const extracted = extractRechargeFromName(strip5eToolsTags(sc.name || 'Spellcasting'));
+    let desc = '';
+    if (sc.headerEntries) desc = flattenEntries(sc.headerEntries);
+    // Add recharge spells
+    if (sc.recharge) {
+      Object.keys(sc.recharge).forEach(function(key) {
+        desc += '\nRecharge ' + key + '-6: ' + sc.recharge[key].map(function(s) { return strip5eToolsTags(s); }).join(', ');
+      });
+    }
+    // Add at-will spells
+    if (sc.will) desc += '\nAt will: ' + sc.will.map(function(s) { return strip5eToolsTags(s); }).join(', ');
+    // Add daily spells
+    if (sc.daily) {
+      Object.keys(sc.daily).forEach(function(key) {
+        const uses = key.replace('e', '');
+        desc += '\n' + uses + '/day: ' + sc.daily[key].map(function(s) { return strip5eToolsTags(s); }).join(', ');
+      });
+    }
+    // Add spell slots
+    if (sc.spells) {
+      Object.keys(sc.spells).forEach(function(lvl) {
+        const slot = sc.spells[lvl];
+        const spellList = (slot.spells || []).map(function(s) { return strip5eToolsTags(s); }).join(', ');
+        if (lvl === '0') desc += '\nCantrips: ' + spellList;
+        else {
+          const slots = slot.slots !== undefined ? ' (' + slot.slots + ' slot' + (slot.slots !== 1 ? 's' : '') + ')' : '';
+          desc += '\nLevel ' + lvl + slots + ': ' + spellList;
+        }
+      });
+    }
+    features.push({
+      name: extracted.cleanName,
+      desc: desc.trim(),
+      recharge: extracted.recharge,
+      usesMax: extracted.usesMax
+    });
+  });
+  return features;
+}
+
+function extractLegendaryResistances(traits) {
+  if (!traits || !Array.isArray(traits)) return 0;
+  for (let i = 0; i < traits.length; i++) {
+    const t = traits[i];
+    if (t.name && t.name.indexOf('Legendary Resistance') !== -1) {
+      const m = t.name.match(/\((\d+)\/Day/i);
+      if (m) return parseInt(m[1], 10);
+      return 3; // Default
+    }
+  }
+  return 0;
+}
+
+function import5etools(json) {
+  // Detect single vs array
+  let creatures;
+  if (Array.isArray(json)) {
+    creatures = json;
+  } else if (json.monster && Array.isArray(json.monster)) {
+    creatures = json.monster;
+  } else if (json.name && (json.str !== undefined || json.ac !== undefined)) {
+    creatures = [json];
+  } else {
+    return [];
+  }
+
+  return creatures.map(function(m) {
+    if (!m || !m.name) return null;
+
+    // Ability scores
+    const abilities = {
+      str: (typeof m.str === 'number' ? m.str : 10),
+      dex: (typeof m.dex === 'number' ? m.dex : 10),
+      con: (typeof m.con === 'number' ? m.con : 10),
+      int: (typeof m.int === 'number' ? m.int : 10),
+      wis: (typeof m.wis === 'number' ? m.wis : 10),
+      cha: (typeof m.cha === 'number' ? m.cha : 10)
+    };
+
+    const crStr = parse5eCr(m.cr);
+    const acData = parse5eAc(m.ac);
+    const initData = parse5eInitiative(m.initiative, abilities.dex, crStr);
+
+    // Parse actions -> attacks + features + multiattack
+    const actionData = parse5eActions(m.action);
+
+    // Start with traits as features
+    const allFeatures = [];
+
+    // Traits (passive features) - skip Legendary Resistance trait (extracted separately)
+    if (m.trait && Array.isArray(m.trait)) {
+      m.trait.forEach(function(t) {
+        if (t.name && t.name.indexOf('Legendary Resistance') !== -1) return;
+        const extracted = extractRechargeFromName(strip5eToolsTags(t.name || ''));
+        allFeatures.push({
+          name: extracted.cleanName,
+          desc: strip5eToolsTags(flattenEntries(t.entries || [])),
+          recharge: extracted.recharge,
+          usesMax: extracted.usesMax
+        });
+      });
+    }
+
+    // Action-derived features
+    actionData.features.forEach(function(f) { allFeatures.push(f); });
+
+    // Bonus actions -> features
+    if (m.bonus && Array.isArray(m.bonus)) {
+      m.bonus.forEach(function(b) {
+        if (!b.name) return;
+        const extracted = extractRechargeFromName(strip5eToolsTags(b.name));
+        allFeatures.push({
+          name: extracted.cleanName + ' (Bonus Action)',
+          desc: strip5eToolsTags(flattenEntries(b.entries || [])),
+          recharge: extracted.recharge,
+          usesMax: extracted.usesMax
+        });
+      });
+    }
+
+    // Reactions -> features
+    if (m.reaction && Array.isArray(m.reaction)) {
+      m.reaction.forEach(function(r) {
+        if (!r.name) return;
+        const extracted = extractRechargeFromName(strip5eToolsTags(r.name));
+        allFeatures.push({
+          name: extracted.cleanName + ' (Reaction)',
+          desc: strip5eToolsTags(flattenEntries(r.entries || [])),
+          recharge: extracted.recharge,
+          usesMax: extracted.usesMax
+        });
+      });
+    }
+
+    // Spellcasting -> features
+    parse5eSpellcasting(m.spellcasting).forEach(function(f) { allFeatures.push(f); });
+
+    // Mythic actions -> features
+    if (m.mythic && Array.isArray(m.mythic)) {
+      m.mythic.forEach(function(my) {
+        if (!my.name) return;
+        const extracted = extractRechargeFromName(strip5eToolsTags(my.name));
+        allFeatures.push({
+          name: extracted.cleanName + ' (Mythic)',
+          desc: strip5eToolsTags(flattenEntries(my.entries || [])),
+          recharge: extracted.recharge,
+          usesMax: extracted.usesMax
+        });
+      });
+    }
+
+    // HP
+    let hpMax = 1;
+    let hpFormula = '';
+    if (m.hp) {
+      if (m.hp.average) hpMax = m.hp.average;
+      if (m.hp.formula) hpFormula = m.hp.formula;
+      if (m.hp.special) { hpFormula = m.hp.special; if (!m.hp.average) hpMax = 0; }
+    }
+
+    return {
+      id: uuid(),
+      name: m.name,
+      size: parse5eSize(m.size),
+      type: parse5eType(m.type),
+      alignment: parse5eAlignment(m.alignment),
+      ac: acData.ac,
+      acNote: acData.acNote,
+      hpMax: hpMax,
+      hpFormula: hpFormula,
+      speed: parse5eSpeed(m.speed),
+      cr: crStr,
+      abilities: abilities,
+      savingThrows: parse5eSaves(m.save),
+      skills: parse5eSkills(m.skill),
+      damageResistances: parse5eResist(m.resist),
+      damageImmunities: parse5eResist(m.immune),
+      damageVulnerabilities: parse5eResist(m.vulnerable),
+      conditionImmunities: parse5eResist(m.conditionImmune),
+      senses: m.senses ? m.senses.join(', ') : '',
+      passivePerception: typeof m.passive === 'number' ? m.passive : null,
+      languages: m.languages ? m.languages.join(', ') : '',
+      tactics: '',
+      initBonus: initData.initBonus,
+      initAdvantage: initData.initAdvantage,
+      critRange: 20,
+      attacks: actionData.attacks,
+      multiattack: actionData.multiattack,
+      features: allFeatures,
+      legendaryActionBudget: m.legendaryActions || (m.legendary && m.legendary.length > 0 ? 3 : 0),
+      legendaryActions: parse5eLegendary(m.legendary),
+      legendaryResistances: extractLegendaryResistances(m.trait),
+      playerDescription: '',
+      dmDescription: ''
+    };
+  }).filter(Boolean);
+}
+
+function detect5eToolsFormat(json) {
+  // Multi-monster wrapper
+  if (json.monster && Array.isArray(json.monster)) return true;
+  // Single creature: has ability scores + ac as array (5etools signature)
+  if (json.name && json.str !== undefined && Array.isArray(json.ac)) return true;
+  // Single creature: has source field (5etools always has this)
+  if (json.name && json.source && (json.str !== undefined || json.dex !== undefined)) return true;
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // ── Import / Export ──
 // ═══════════════════════════════════════════════════════════════
 
@@ -5119,37 +5692,122 @@ async function exportMonster(id) {
 
 function showImportMonsterDialog() {
   const bodyHtml =
+    '<div class="modal-toggle-group">' +
+    '<button id="importModeSquishtext" class="active" onclick="switchImportMode(\'squishtext\')">SquishText</button>' +
+    '<button id="importMode5etools" onclick="switchImportMode(\'5etools\')">5etools</button>' +
+    '</div>' +
+    '<div id="importBody">' +
     '<p class="text-muted-sm" style="margin-bottom:0.75rem">Select one or more .squishtext files containing monster templates.</p>' +
     '<input type="file" id="importFileInput" accept=".squishtext" multiple style="margin-bottom:1rem;font-size:0.8rem;color:var(--text)">' +
     '<p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:1rem">New monsters will be added. Existing monsters are kept (duplicates skipped by ID).</p>' +
+    '</div>' +
     '<div class="flex-row-end">' +
     '<button class="btn-sm" onclick="document.getElementById(\'importModal\').remove()">Cancel</button>' +
     '<button class="btn-sm btn-action" onclick="doImportMonster()">Import</button>' +
     '</div>';
-  createModal('importModal', 'Import Monsters', bodyHtml);
+  createModal('importModal', 'Import Monsters', bodyHtml, { wide: true });
+}
+
+function switchImportMode(mode) {
+  const activeId = mode === 'squishtext' ? 'importModeSquishtext' : 'importMode5etools';
+  ['importModeSquishtext', 'importMode5etools'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.className = id === activeId ? 'active' : '';
+  });
+  const body = document.getElementById('importBody');
+  if (!body) return;
+  const inputStyle = 'padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.85rem';
+  if (mode === 'squishtext') {
+    body.innerHTML =
+      '<p class="text-muted-sm" style="margin-bottom:0.75rem">Select one or more .squishtext files containing monster templates.</p>' +
+      '<input type="file" id="importFileInput" accept=".squishtext" multiple style="margin-bottom:1rem;font-size:0.8rem;color:var(--text)">' +
+      '<p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:1rem">New monsters will be added. Existing monsters are kept (duplicates skipped by ID).</p>';
+  } else if (mode === '5etools') {
+    body.innerHTML =
+      '<p class="text-muted-sm" style="margin-bottom:0.75rem">Paste 5etools creature JSON, or select .json files.</p>' +
+      '<textarea id="importPasteInput" rows="6" placeholder="Paste 5etools JSON here..." style="width:100%;margin-bottom:0.75rem;font-family:var(--mono);' + inputStyle + '"></textarea>' +
+      '<p class="text-muted-sm" style="margin-bottom:0.5rem">Or select .json files:</p>' +
+      '<input type="file" id="importFileInput" accept=".json" multiple style="margin-bottom:1rem;font-size:0.8rem;color:var(--text)">' +
+      '<p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:1rem">Accepts single creatures or bestiary files with a "monster" array. Duplicates skipped by name.</p>';
+  }
 }
 
 async function doImportMonster() {
+  // Determine active mode
+  const is5etools = document.getElementById('importMode5etools') &&
+    document.getElementById('importMode5etools').className === 'active';
+
   const fileInput = document.getElementById('importFileInput');
-  if (!fileInput || !fileInput.files.length) {
-    setStatus('Select a file first.', 'warning');
+  const pasteInput = document.getElementById('importPasteInput');
+  const hasPaste = pasteInput && pasteInput.value.trim();
+  const hasFiles = fileInput && fileInput.files && fileInput.files.length > 0;
+
+  if (!hasPaste && !hasFiles) {
+    setStatus(is5etools ? 'Paste JSON or select a file first.' : 'Select a file first.', 'warning');
     return;
   }
+
   try {
     const existingIds = new Set(state.templates.map(t => t.id));
+    const existingNames = new Set(state.templates.map(t => t.name.toLowerCase()));
     let added = 0, dupes = 0, totalFound = 0;
-    for (const file of fileInput.files) {
-      const text = await file.text();
-      const decompressed = await decompress(text);
-      const data = JSON.parse(decompressed);
-      if (!data.templates || !data.templates.length) continue;
-      totalFound += data.templates.length;
-      data.templates.forEach(t => {
-        if (!existingIds.has(t.id)) { state.templates.push(t); existingIds.add(t.id); added++; }
-        else { dupes++; }
-      });
+
+    if (is5etools) {
+      // Collect all JSON texts (paste + files)
+      const jsonTexts = [];
+      if (hasPaste) jsonTexts.push(pasteInput.value.trim());
+      if (hasFiles) {
+        for (const file of fileInput.files) {
+          jsonTexts.push(await file.text());
+        }
+      }
+      for (const text of jsonTexts) {
+        const data = JSON.parse(text);
+        const templates = import5etools(data);
+        totalFound += templates.length;
+        templates.forEach(function(t) {
+          if (!existingNames.has(t.name.toLowerCase())) {
+            state.templates.push(t);
+            existingIds.add(t.id);
+            existingNames.add(t.name.toLowerCase());
+            added++;
+          } else { dupes++; }
+        });
+      }
+    } else {
+      // SquishText mode (original behavior)
+      for (const file of fileInput.files) {
+        const text = await file.text();
+        let data;
+        // Try SquishText first, fall back to raw JSON
+        try {
+          const decompressed = await decompress(text);
+          data = JSON.parse(decompressed);
+        } catch (e) {
+          data = JSON.parse(text);
+        }
+        // Check if this is a 5etools format that was loaded as a file
+        if (detect5eToolsFormat(data)) {
+          const templates = import5etools(data);
+          totalFound += templates.length;
+          templates.forEach(function(t) {
+            if (!existingNames.has(t.name.toLowerCase())) {
+              state.templates.push(t);
+              existingIds.add(t.id);
+              existingNames.add(t.name.toLowerCase());
+              added++;
+            } else { dupes++; }
+          });
+        } else if (data.templates && data.templates.length) {
+          totalFound += data.templates.length;
+          data.templates.forEach(function(t) {
+            if (!existingIds.has(t.id)) { state.templates.push(t); existingIds.add(t.id); added++; }
+            else { dupes++; }
+          });
+        }
+      }
     }
-    if (totalFound === 0) throw new Error('No monster templates found in selected files');
+    if (totalFound === 0) throw new Error('No monster templates found');
     save('templates');
     const modal = document.getElementById('importModal');
     if (modal) modal.remove();
