@@ -901,15 +901,47 @@ Render the monster stat block as a PNG image using the Canvas API. Pure function
 
 Downloaded as `MonsterName.png`.
 
+## Phase 9 - Attack Descriptions & Lair Actions (done)
+
+### 9.1 - Attack Descriptions
+- `desc` field added to attack objects for special effects, conditions, and flavor text beyond mechanical info
+- Template editor: textarea below attack name/bonus/note row
+- Combat panel: description shown below damage summary with inline clickable dice (sourceType: `'attack'`)
+- Override edit form: desc textarea with revert support
+- Markdown export: description line after attack mechanical line
+- Image export: wrapped body text after attack feature block
+- 5etools importer: regex strips mechanical parts from `strippedEntry`, saves remainder as `desc` if length > 10
+
+### 9.2 - Lair Actions
+- `lairActions: []` array on templates, each element: `{ name, desc }`
+- `ensureArray()` guard in `getTemplate()` for backward compatibility
+- Template editor: Lair Actions section after Legendary (name + desc + remove per row, + Add button)
+- Combat panel: reference-only display (no budget/use buttons), inline clickable dice (sourceType: `'lair'`)
+- Override edit form: name input + desc textarea per lair action with revert support
+- Combat start notification: `beginCombat()` checks all combatants for lair actions, deduplicates by templateId, shows `createModal()` listing all lair action names + descriptions grouped by template if multiple
+- Markdown export: "### Lair Actions" section with intro text and formatted entries
+- Image export: canvas section with divider, header, italic intro, feature blocks
+- 5etools importer: `lairActions: []` in output (5etools stores lair actions in separate `legendaryGroup` references)
+
+### Phase 9 Data Changes
+New field on attack objects:
+```json
+{ "desc": "The target must succeed on a DC 13 Con save or take 2d6 poison damage." }
+```
+New field on monster template:
+```json
+{ "lairActions": [{ "name": "Tremor", "desc": "Each creature within 60 ft..." }] }
+```
+
 ## Future Phases
 
-### Phase 9 - CritterDB Importer
+### Phase 10 - CritterDB Importer
 - Discovery: investigate CritterDB JSON export format
 - Data mapping: map CritterDB fields to canonical template schema
 - Pure function: `importCritterDB(json) → template[]`
 - UI: integrate into Import Monster modal
 
-### Phase 10 - Bestiary Builder Importer
+### Phase 11 - Bestiary Builder Importer
 - Discovery: investigate Bestiary Builder JSON export format
 - Data mapping: map fields to canonical template schema
 - Pure function: `importBestiaryBuilder(json) → template[]`

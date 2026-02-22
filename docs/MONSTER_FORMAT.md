@@ -103,6 +103,7 @@ The `templates` array can contain one or more monster templates. When importing,
   "legendaryActionBudget": 0,
   "legendaryActions": [],
   "legendaryResistances": 0,
+  "lairActions": [],
   "tactics": "",
   "playerDescription": "",
   "dmDescription": ""
@@ -203,6 +204,7 @@ Array of attack objects. Each attack can have multiple damage entries (e.g., a b
     "name": "Bite",
     "bonus": 5,
     "note": "reach 5 ft.",
+    "desc": "The target must succeed on a DC 13 Constitution saving throw or take 2d6 poison damage.",
     "damages": [
       { "dice": "1d8+3", "type": "piercing", "note": "" },
       { "dice": "2d6", "type": "poison", "note": "on hit" }
@@ -218,6 +220,7 @@ Array of attack objects. Each attack can have multiple damage entries (e.g., a b
 | `name` | string | Attack name (e.g., "Bite", "Scimitar") |
 | `bonus` | number | To-hit bonus (e.g., 5 for +5) |
 | `note` | string | Range or reach note (e.g., "reach 10 ft.", "ranged 80/320 ft.") |
+| `desc` | string | Special effects, conditions, or additional details. Dice notation (e.g., "2d6") becomes clickable in combat. Optional. |
 | `damages` | array | One or more damage entries |
 
 **Damage entry fields:**
@@ -299,6 +302,25 @@ Include trigger conditions in the `desc` text so the DM knows when the ability a
 | `legendaryActionBudget` | number | Legendary actions per round (typically 3). Set to 0 for no legendary actions. |
 | `legendaryActions` | array | Each with `name` (string), `cost` (number), and `desc` (string) |
 | `legendaryResistances` | number | Number of legendary resistances. Set to 0 for none. |
+
+### Lair Actions
+
+```json
+"lairActions": [
+  {
+    "name": "Tremor",
+    "desc": "The dragon causes a tremor. Each creature on the ground within 60 feet must succeed on a DC 15 Dexterity saving throw or be knocked prone."
+  },
+  {
+    "name": "Volcanic Gas",
+    "desc": "Volcanic gases form a cloud in a 20-foot-radius sphere. Each creature in the cloud must succeed on a DC 13 Constitution saving throw or be poisoned until the end of its next turn."
+  }
+]
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `lairActions` | array | Each with `name` (string) and `desc` (string). Displayed as reference in the combat panel. A notification modal lists available lair actions when combat starts. |
 
 ### Other Fields
 

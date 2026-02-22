@@ -1123,10 +1123,11 @@ function newTemplate() {
     damageResistances: '', damageImmunities: '', conditionImmunities: '', damageVulnerabilities: '',
     senses: '', passivePerception: null, languages: '', tactics: '',
     initBonus: 0, initAdvantage: false, critRange: 20,
-    attacks: [], // each: { name, bonus, note, damages: [{ dice, type, note }] }
+    attacks: [], // each: { name, bonus, note, desc, damages: [{ dice, type, note }] }
     multiattack: '',
     features: [],
     legendaryActionBudget: 0, legendaryActions: [], legendaryResistances: 0,
+    lairActions: [], // each: { name, desc }
     playerDescription: '', dmDescription: ''
   };
 }
@@ -1314,6 +1315,8 @@ function rollInlineDice(combatantIdx, notation, sourceType, sourceIdx) {
     if (template) {
       if (sourceType === 'feature' && template.features[sourceIdx]) label = esc(template.features[sourceIdx].name) + ': ' + notation;
       else if (sourceType === 'la' && template.legendaryActions[sourceIdx]) label = esc(template.legendaryActions[sourceIdx].name) + ': ' + notation;
+      else if (sourceType === 'attack' && template.attacks[sourceIdx]) label = esc(template.attacks[sourceIdx].name) + ': ' + notation;
+      else if (sourceType === 'lair' && template.lairActions && template.lairActions[sourceIdx]) label = esc(template.lairActions[sourceIdx].name) + ': ' + notation;
     }
   }
   c.rollLog.push({ label: label, text: esc(result.text) + (result.text.indexOf('=') === -1 ? ' = ' + result.total : ''), cssClass: '' });
@@ -1620,6 +1623,7 @@ function getTemplate(c) {
   t.attacks = ensureArray(t.attacks);
   t.features = ensureArray(t.features);
   t.legendaryActions = ensureArray(t.legendaryActions);
+  t.lairActions = ensureArray(t.lairActions);
   return t;
 }
 
@@ -2001,10 +2005,11 @@ function renderTemplateForm() {
       html += '</div>';
     }
     html += '<button class="btn-add-row btn-sm" onclick="formState.data.attacks[' + i + '].damages.push({dice:\'\',type:\'\',note:\'\'});renderTemplateForm()" style="margin-left:0.75rem">+ Damage</button>';
+    html += '<div class="dyn-row" style="margin-top:0.5rem"><textarea onchange="formState.data.attacks[' + i + '].desc=this.value" placeholder="Special effects, conditions, additional details..." style="width:100%">' + esc(a.desc || '') + '</textarea></div>';
     html += '</div>';
   });
   html += '</div>';
-  html += '<button class="btn-add-row" onclick="formState.data.attacks.push({name:\'\',bonus:0,note:\'\',damages:[{dice:\'\',type:\'\',note:\'\'}]});renderTemplateForm()">+ Add Attack</button>';
+  html += '<button class="btn-add-row" onclick="formState.data.attacks.push({name:\'\',bonus:0,note:\'\',desc:\'\',damages:[{dice:\'\',type:\'\',note:\'\'}]});renderTemplateForm()">+ Add Attack</button>';
   html += '</div>';
 
   // ── Features ──
@@ -2059,6 +2064,26 @@ function renderTemplateForm() {
     html += '<button class="btn-add-row" onclick="formState.data.legendaryActions.push({name:\'\',cost:1,desc:\'\'});renderTemplateForm()">+ Add Legendary Action</button>';
     html += '</div>';
   }
+  html += '</div>';
+
+  // ── Lair Actions ──
+  html += '<div class="form-section"><div class="form-section-title">Lair Actions</div>';
+  if (d.lairActions && d.lairActions.length > 0) {
+    html += '<div class="dyn-header">';
+    html += '<span class="dyn-label" style="flex:2">Name</span>';
+    html += '<span style="width:30px"></span>';
+    html += '</div>';
+    d.lairActions.forEach((la, i) => {
+      html += '<div class="dyn-row" style="flex-direction:column">';
+      html += '<div style="display:flex;gap:0.4rem;width:100%">';
+      html += '<input type="text" value="' + esc(la.name) + '" onchange="formState.data.lairActions[' + i + '].name=this.value" placeholder="Lair action name" style="flex:2">';
+      html += '<button class="btn-remove" onclick="formState.data.lairActions.splice(' + i + ',1);renderTemplateForm()">×</button>';
+      html += '</div>';
+      html += '<textarea onchange="formState.data.lairActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%">' + esc(la.desc || '') + '</textarea>';
+      html += '</div>';
+    });
+  }
+  html += '<button class="btn-add-row" onclick="if(!formState.data.lairActions)formState.data.lairActions=[];formState.data.lairActions.push({name:\'\',desc:\'\'});renderTemplateForm()">+ Add Lair Action</button>';
   html += '</div>';
 
   // ── Tactics ──
@@ -3028,6 +3053,32 @@ function beginCombat() {
   saveCombat();
   setStatus('Round 1 - ' + first.name + '\'s turn', 'success');
   render();
+
+  // Lair action notification — deduplicated by templateId
+  const lairTemplates = {};
+  combat.combatants.forEach(function(c) {
+    if (c.type !== 'monster' || !c.templateId || lairTemplates[c.templateId]) return;
+    const t = getTemplate(c);
+    if (t && t.lairActions && t.lairActions.length > 0) {
+      lairTemplates[c.templateId] = { name: t.name, actions: t.lairActions };
+    }
+  });
+  const lairEntries = Object.values(lairTemplates);
+  if (lairEntries.length > 0) {
+    let body = '';
+    lairEntries.forEach(function(entry) {
+      body += '<div class="detail-section-title" style="margin-top:0.5rem;color:var(--accent)">' + esc(entry.name) + '</div>';
+      entry.actions.forEach(function(la) {
+        body += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
+        body += '<div style="font-size:0.75rem"><strong>' + esc(la.name) + '</strong></div>';
+        if (la.desc) body += '<div class="text-dim-sm" style="margin-top:0.15rem">' + esc(la.desc) + '</div>';
+        body += '</div>';
+      });
+    });
+    body += '<div style="margin-top:0.75rem;font-size:0.72rem;color:var(--text-dim)">Use + Add to create a Lair combatant in the initiative order.</div>';
+    body += '<div style="margin-top:0.75rem;text-align:right"><button class="btn-action" onclick="this.closest(\'.modal-overlay\').remove()">Got it</button></div>';
+    createModal('lairNotifyModal', 'Lair Actions Available', body, { clickOutsideClose: true, escapeClose: true });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3454,6 +3505,10 @@ function renderEditOverrideForm() {
       });
       html += '</div>';
     }
+    html += '<div class="dyn-row" style="margin-top:0.5rem">';
+    html += '<textarea onchange="editState.formData.attacks[' + i + '].desc=this.value" placeholder="Special effects, conditions..." style="width:100%"' + editFieldAttr(afp + '.desc') + '>' + esc(editVal(a.desc || '', afp + '.desc')) + '</textarea>';
+    html += editRevertBtn(afp + '.desc');
+    html += '</div>';
     html += '</div>';
   });
   html += '</div></div>';
@@ -3499,6 +3554,23 @@ function renderEditOverrideForm() {
       html += '</div>';
     });
     html += '</div>';
+  }
+  html += '</div>';
+
+  // ── Lair Actions ──
+  html += '<div class="form-section"><div class="form-section-title">Lair Actions</div>';
+  if (d.lairActions && d.lairActions.length > 0) {
+    d.lairActions.forEach(function(la, i) {
+      const lfp = 'lairActions.' + i;
+      html += '<div class="dyn-row" style="flex-direction:column">';
+      html += '<div style="display:flex;gap:0.4rem;width:100%">';
+      html += '<input type="text" value="' + esc(editVal(la.name, lfp + '.name')) + '" onchange="editState.formData.lairActions[' + i + '].name=this.value" placeholder="Lair action name" style="flex:1"' + editFieldAttr(lfp + '.name') + '>';
+      html += editRevertBtn(lfp + '.name');
+      html += '</div>';
+      html += '<textarea onchange="editState.formData.lairActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%"' + editFieldAttr(lfp + '.desc') + '>' + esc(editVal(la.desc, lfp + '.desc')) + '</textarea>';
+      html += editRevertBtn(lfp + '.desc');
+      html += '</div>';
+    });
   }
   html += '</div>';
 
@@ -3875,6 +3947,11 @@ function renderMonsterDetail(c, idx, template) {
         html += atk.damages.map(function(dm, dmIdx) { return ovh(c, 'attacks.' + atkIdx + '.damages.' + dmIdx + '.dice', esc(dm.dice)) + ' ' + ovh(c, 'attacks.' + atkIdx + '.damages.' + dmIdx + '.type', esc(dm.type)) + (dm.note ? ' (' + ovh(c, 'attacks.' + atkIdx + '.damages.' + dmIdx + '.note', esc(dm.note)) + ')' : ''); }).join(' + ');
         html += '</div>';
       }
+      if (atk.desc) {
+        let atkDescHtml = renderDiceText(esc(atk.desc), idx, 'attack', atkIdx);
+        if (isFieldOverridden(c, 'attacks.' + atkIdx + '.desc')) atkDescHtml = '<span class="override-highlight">' + atkDescHtml + '</span>';
+        html += '<div class="text-dim-sm" style="margin-top:0.15rem">' + atkDescHtml + '</div>';
+      }
       html += '</div>';
     });
   }
@@ -3910,6 +3987,21 @@ function renderMonsterDetail(c, idx, template) {
     html += '<button class="btn-sm btn-accent"' + (lrRemaining <= 0 ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();useLegendaryResistance(' + idx + ')"' + (lrRemaining <= 0 ? ' disabled' : '') + '>Use LR</button>';
     html += '<button class="btn-sm btn-success"' + (lrRemaining >= template.legendaryResistances ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();restoreLegendaryResistance(' + idx + ')"' + (lrRemaining >= template.legendaryResistances ? ' disabled' : '') + '>Restore LR</button>';
     html += '</div>';
+  }
+
+  // Lair Actions (reference only)
+  if (template.lairActions && template.lairActions.length > 0) {
+    html += '<div class="detail-section-title" style="margin-top:0.5rem">Lair Actions</div>';
+    template.lairActions.forEach((la, laIdx) => {
+      html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
+      html += '<div style="font-size:0.75rem"><strong>' + ovh(c, 'lairActions.' + laIdx + '.name', esc(la.name)) + '</strong></div>';
+      if (la.desc) {
+        let laDescHtml = renderDiceText(esc(la.desc), idx, 'lair', laIdx);
+        if (isFieldOverridden(c, 'lairActions.' + laIdx + '.desc')) laDescHtml = '<span class="override-highlight">' + laDescHtml + '</span>';
+        html += '<div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem">' + laDescHtml + '</div>';
+      }
+      html += '</div>';
+    });
   }
 
   // Roll log
@@ -5027,7 +5119,18 @@ function strip5eToolsTags(text) {
     s = s.replace(/\{@([\w]+)\s*([^{}]*)\}/g, function(match, tag, content) {
       tag = tag.toLowerCase();
       if (tag === 'h') return 'Hit: ';
-      if (tag === 'atkr' || tag === 'atk') return '';
+      if (tag === 'atkr' || tag === 'atk') {
+        const ps = content.split(',').map(function(p) { return p.trim().toLowerCase(); });
+        const lbl = [];
+        if (ps.indexOf('mw') !== -1) lbl.push('Melee');
+        if (ps.indexOf('rw') !== -1) lbl.push('Ranged');
+        if (ps.indexOf('ms') !== -1) lbl.push('Melee');
+        if (ps.indexOf('rs') !== -1) lbl.push('Ranged');
+        const spell = ps.indexOf('ms') !== -1 || ps.indexOf('rs') !== -1;
+        if (lbl.length === 0) return '';
+        return lbl.filter(function(v, i, a) { return a.indexOf(v) === i; }).join(' or ') +
+          (spell ? ' Spell' : ' Weapon') + ' Attack: ';
+      }
       if (tag === 'hit') return '+' + content.trim();
       if (tag === 'dc') return 'DC ' + content.trim();
       if (tag === 'recharge') {
@@ -5363,7 +5466,10 @@ function parse5eActions(actionArr) {
         }
       }
 
-      attacks.push({ name: attackName, bonus: bonus, note: attackNote, damages: damages });
+      // Use full stripped entry text as attack description
+      const attackDesc = strippedEntry ? strippedEntry.replace(/\s+/g, ' ').trim() : '';
+
+      attacks.push({ name: attackName, bonus: bonus, note: attackNote, desc: attackDesc, damages: damages });
     } else {
       // Non-attack action -> feature
       const extracted = extractRechargeFromName(strip5eToolsTags(rawName));
@@ -5599,6 +5705,7 @@ function import5etools(json) {
       legendaryActionBudget: m.legendaryActions || (m.legendary && m.legendary.length > 0 ? 3 : 0),
       legendaryActions: parse5eLegendary(m.legendary),
       legendaryResistances: extractLegendaryResistances(m.trait),
+      lairActions: [],
       playerDescription: '',
       dmDescription: ''
     };
@@ -5978,6 +6085,15 @@ function templateToCanvas(t) {
         desc += ' Hit: ' + parts.join(' plus ') + ' damage.';
       }
       featureBlock(atk.name + '.', desc);
+      if (atk.desc) {
+        const atkDescLines = wrapCanvasText(ctx, atk.desc, CW, BODY_FONT);
+        ctx.font = BODY_FONT;
+        ctx.fillStyle = BLACK;
+        atkDescLines.forEach(function(line) {
+          y += LINE_H;
+          ctx.fillText(line, PAD, y);
+        });
+      }
       y += 4;
     });
   }
@@ -6029,6 +6145,26 @@ function templateToCanvas(t) {
       let name = la.name || 'Unnamed';
       if (la.cost > 1) name += ' (Costs ' + la.cost + ' Actions)';
       featureBlock(name + '.', la.desc);
+      y += 4;
+    });
+  }
+
+  // ── 10. Lair Actions ──
+  if (t.lairActions && t.lairActions.length > 0) {
+    divider();
+    sectionHeader('Lair Actions');
+    const lairIntro = 'On initiative count 20 (losing initiative ties), ' +
+      (t.name || 'the creature') + ' can take a lair action to cause one of the following effects:';
+    const lairIntroLines = wrapCanvasText(ctx, lairIntro, CW, ITALIC_FONT);
+    ctx.font = ITALIC_FONT;
+    ctx.fillStyle = BLACK;
+    lairIntroLines.forEach(function(line) {
+      y += LINE_H;
+      ctx.fillText(line, PAD, y);
+    });
+    y += 6;
+    t.lairActions.forEach(function(la) {
+      featureBlock((la.name || 'Unnamed') + '.', la.desc);
       y += 4;
     });
   }
@@ -6182,6 +6318,7 @@ function templateToMarkdown(t) {
         line += ' *Hit:* ' + parts.join(' plus ') + ' damage.';
       }
       lines.push(line);
+      if (atk.desc) lines.push(atk.desc);
       lines.push('');
     });
   }
@@ -6220,6 +6357,19 @@ function templateToMarkdown(t) {
       if (la.cost > 1) line += ' (Costs ' + la.cost + ' Actions)';
       line += '.** ' + (la.desc || '');
       lines.push(line);
+      lines.push('');
+    });
+  }
+
+  // Lair Actions
+  if (t.lairActions && t.lairActions.length > 0) {
+    lines.push('### Lair Actions');
+    lines.push('');
+    lines.push('On initiative count 20 (losing initiative ties), ' +
+      (t.name || 'the creature') + ' can take a lair action to cause one of the following effects:');
+    lines.push('');
+    t.lairActions.forEach(function(la) {
+      lines.push('**' + la.name + '.** ' + (la.desc || ''));
       lines.push('');
     });
   }

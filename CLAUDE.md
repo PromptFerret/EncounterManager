@@ -119,7 +119,7 @@ let autoExpandedId = null; // persisted in state.preferences - combatant ID auto
 
 ### Data Schemas
 
-**Monster Template** - canonical definition with all stats, attacks, features, legendary actions. Key fields: `abilities` (object with str/dex/con/int/wis/cha), `attacks[]` (each with `damages[]` array of `{dice, type, note}`), `features[]` (with optional `recharge` and `uses/usesMax`), `passivePerception` (null = auto-calc from WIS mod or Perception skill), `critRange` (default 20, customizable for homebrew), `playerDescription` (flavor text - what players see), `dmDescription` (lore/SRD reference for the DM).
+**Monster Template** - canonical definition with all stats, attacks, features, legendary actions, lair actions. Key fields: `abilities` (object with str/dex/con/int/wis/cha), `attacks[]` (each with `bonus`, `note`, `desc` for full attack text, and `damages[]` array of `{dice, type, note}`), `features[]` (with optional `recharge` and `uses/usesMax`), `legendaryActions[]` (each with `name`, `cost`, `desc`), `lairActions[]` (each with `name`, `desc` - reference only, no budget/tracking), `passivePerception` (null = auto-calc from WIS mod or Perception skill), `critRange` (default 20, customizable for homebrew), `playerDescription` (flavor text - what players see), `dmDescription` (lore/SRD reference for the DM).
 
 **Encounter** - `{ id, name, location, campaign, notes, monsters: [{ templateId, qty }] }`. No players - party selected at combat time.
 

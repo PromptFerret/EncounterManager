@@ -86,6 +86,26 @@ Monsters with legendary resistances show an **LR:X/Y** badge in the initiative l
 
 The count display turns red when resistances are at 0.
 
+## Lair Actions
+
+Lair actions represent environmental effects a creature can trigger when fighting in its lair. They are defined on the monster template and displayed as a reference section in the combat detail panel.
+
+### Display
+
+If a monster has lair actions, a **Lair Actions** section appears in the detail panel after Legendary Resistances. Each lair action shows its name and description. Dice notation in the description is clickable.
+
+Lair actions are reference-only - there is no budget, use tracking, or buttons. The DM decides when and how to use them, typically on initiative count 20.
+
+### Combat Start Notification
+
+When combat begins and any monster has lair actions, a notification modal appears listing all available lair actions grouped by monster name. This reminds the DM what's in play. The modal is informational only - dismiss it with **Got it**, Escape, or clicking outside.
+
+If multiple instances of the same monster are in combat, their lair actions appear once (deduplicated by template). If multiple different monsters have lair actions, each is listed under its name.
+
+### Overrides
+
+Lair action names and descriptions can be edited per-combatant using the override system (single edit or batch edit). Modified lair action fields are highlighted in the detail panel.
+
 ## Feature Use Tracking
 
 Features with limited uses (set on the template) are tracked during combat.

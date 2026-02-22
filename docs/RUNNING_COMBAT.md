@@ -22,6 +22,8 @@ You can also click **+ Add** to add more combatants. See [Adding Combatants Mid-
 
 When all players have initiative values, click **Begin Combat** to sort everyone by initiative (descending) and start Round 1.
 
+If any monster in the combat has lair actions, a notification modal appears listing them by monster name. This is a one-time reminder so the DM knows what lair actions are available. Dismiss it with the **Got it** button, Escape, or clicking outside. Multiple instances of the same monster are shown once (deduplicated by template).
+
 ## The Combat Screen
 
 ### Top Bar
@@ -87,6 +89,7 @@ For each attack defined on the template:
   - **Atk** - click to choose: Disadvantage, Normal, or Advantage. Normal rolls 1d20 + hit bonus. Advantage rolls two d20s and takes the higher. Disadvantage takes the lower.
   - **Dmg** - click to choose: Normal or Crit. Normal rolls all damage dice. Crit doubles the dice count (not the modifier).
 - Damage summary showing dice + type for each damage entry
+- If the attack has a description, it appears below the damage summary. Dice notation in the description is clickable.
 
 All roll results appear in the **roll log** below the attacks. Crits show as "NAT 20!" and fumbles show as "NAT 1".
 

@@ -57,12 +57,13 @@ The importer handles single creatures (a top-level JSON object) and multi-creatu
 - Damage resistances, immunities, vulnerabilities, and condition immunities
 - Senses, languages, passive perception
 - Initiative bonus (including advantage detection)
-- Attacks with hit bonus, reach/range, and damage dice
+- Attacks with hit bonus, reach/range, damage dice, and full description text
 - Multiattack text
 - Features and traits with recharge and use tracking
 - Spellcasting (converted to features)
 - Legendary actions with cost, legendary resistances
 - Bonus actions and reactions (added as features with type annotation)
+- Lair actions (empty by default - 5etools stores lair actions in separate group references, not on individual monsters)
 
 **What to check after import:**
 

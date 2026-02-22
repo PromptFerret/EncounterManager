@@ -81,6 +81,8 @@ Each attack has one or more **damage entries**. Click **+ Damage** inside the at
 - **Type** (e.g., "slashing", "fire")
 - **Note** (e.g., "on hit", "if target is prone")
 
+Below the damage entries, an optional **Description** textarea holds the full attack text - special effects, conditions, saving throws, or any additional details. Dice notation in the description (like `2d6`) becomes clickable in combat. When importing from 5etools, this field is auto-populated with the full attack entry text.
+
 ### Features & Abilities
 
 Click **+ Add Feature** to add a trait or ability. Each feature has:
@@ -99,6 +101,14 @@ When Actions/Round is greater than 0, you can add legendary actions with **+ Add
 - **Name** (e.g., "Detect", "Tail Attack")
 - **Cost** (how many legendary actions it costs, typically 1 or 2)
 - **Description** - full text, supports clickable dice notation
+
+### Lair Actions
+
+A dynamic list for creatures that fight in their lair. Click **+ Add Lair Action** to add a row:
+- **Name** (e.g., "Tremor", "Volcanic Gas")
+- **Description** - the full lair action text. Dice notation becomes clickable in combat.
+
+Lair actions are reference-only during combat - they appear in the detail panel but have no budget or use tracking (unlike legendary actions). When combat starts with a monster that has lair actions, a notification modal lists all available lair actions so the DM knows what's in play.
 
 ### Tactics & Notes
 
