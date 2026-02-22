@@ -428,6 +428,7 @@
     flex: 1; padding: 0.4rem 0.6rem; font-size: 0.78rem; font-weight: 600;
     border: 1px solid var(--border); border-radius: 0; background: var(--bg); color: var(--text-muted);
     cursor: pointer; transition: background 0.15s, color 0.15s;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
   }
   .modal-toggle-group button:first-child { border-radius: var(--radius) 0 0 var(--radius); }
   .modal-toggle-group button:not(:first-child) { border-left: none; }
@@ -1052,6 +1053,7 @@ let editState = {
   conflicts: new Set()      // set of field paths where selected combatants disagree
 };
 let diceRollerHistory = [];        // ephemeral roll history for the dice roller modal
+let _exportTargetId = null;        // template ID for export modal
 
 function getActiveCombat() {
   if (!activeCombatId) return null;
@@ -5617,9 +5619,18 @@ function detect5eToolsFormat(json) {
 // ── Import / Export ──
 // ═══════════════════════════════════════════════════════════════
 
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 async function exportData() {
   try {
     const payload = {
+      format: 'encounter-manager',
       version: 1,
       exported: new Date().toISOString(),
       templates: state.templates,
@@ -5631,13 +5642,7 @@ async function exportData() {
     const json = JSON.stringify(payload);
     const compressed = await compress(json);
     const header = '[SquishText] To decode, base64-decode the string below then inflate (deflate-raw). Or paste at https://promptferret.github.io/SquishText/\n';
-    const blob = header + compressed;
-    const file = new Blob([blob], { type: 'text/plain' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(file);
-    a.download = 'encounter-backup-' + new Date().toISOString().slice(0, 10) + '.squishtext';
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadBlob(new Blob([header + compressed], { type: 'text/plain;charset=utf-8' }), 'encounter-backup-' + new Date().toISOString().slice(0, 10) + '.squishtext');
     setStatus('Backup exported!', 'success');
   } catch (e) {
     console.error('Export failed:', e);
@@ -5697,23 +5702,625 @@ function showImportDialog() {
   input.click();
 }
 
+// ── Monster Export Formatters ──
+
+function wrapCanvasText(ctx, text, maxWidth, font) {
+  ctx.font = font;
+  const words = text.split(/\s+/);
+  const lines = [];
+  let current = '';
+  for (let i = 0; i < words.length; i++) {
+    const test = current ? current + ' ' + words[i] : words[i];
+    if (ctx.measureText(test).width > maxWidth - 2 && current) {
+      lines.push(current);
+      current = words[i];
+    } else {
+      current = test;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length > 0 ? lines : [''];
+}
+
+function templateToCanvas(t) {
+  const W = 400;
+  const PAD = 16;
+  const CW = W - PAD * 2;
+  const BG = '#FDF1DC';
+  const RED = '#58180D';
+  const BLACK = '#1A1A1A';
+  const LINE_H = 14;
+  const BODY_FONT = '10px Georgia, "Times New Roman", serif';
+  const BOLD_FONT = 'bold 10px Georgia, "Times New Roman", serif';
+  const ITALIC_FONT = 'italic 10px Georgia, "Times New Roman", serif';
+  const HEADER_FONT = 'bold 13px Georgia, "Times New Roman", serif';
+  const TABLE_FONT = '9px Georgia, "Times New Roman", serif';
+  const TABLE_BOLD = 'bold 9px Georgia, "Times New Roman", serif';
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = 4000;
+  const ctx = canvas.getContext('2d');
+
+  // Fill background
+  ctx.fillStyle = BG;
+  ctx.fillRect(0, 0, W, 4000);
+
+  let y = 0;
+
+  // Draw red divider
+  function divider() {
+    y += 6;
+    ctx.fillStyle = RED;
+    ctx.fillRect(PAD - 2, y, CW + 4, 2);
+    y += 8;
+  }
+
+  // Draw bold label + normal value, wrapping if needed. Returns new y.
+  function labelLine(label, value) {
+    ctx.font = BOLD_FONT;
+    ctx.fillStyle = BLACK;
+    const labelW = ctx.measureText(label + ' ').width;
+    ctx.font = BODY_FONT;
+    const valueW = ctx.measureText(value).width;
+    if (labelW + valueW <= CW) {
+      y += LINE_H;
+      ctx.font = BOLD_FONT;
+      ctx.fillText(label, PAD, y);
+      ctx.font = BODY_FONT;
+      ctx.fillText(' ' + value, PAD + labelW, y);
+    } else {
+      // Wrap: first line gets label + partial value, rest is full width
+      const allWords = value.split(/\s+/);
+      let firstVal = '';
+      let wi = 0;
+      ctx.font = BODY_FONT;
+      while (wi < allWords.length) {
+        const test = firstVal ? firstVal + ' ' + allWords[wi] : allWords[wi];
+        if (ctx.measureText(test).width > CW - labelW - 2 && firstVal) break;
+        firstVal = test;
+        wi++;
+      }
+      y += LINE_H;
+      ctx.font = BOLD_FONT;
+      ctx.fillText(label, PAD, y);
+      ctx.font = BODY_FONT;
+      ctx.fillText(' ' + firstVal, PAD + labelW, y);
+      const rest = allWords.slice(wi).join(' ');
+      if (rest) {
+        const wrapped = wrapCanvasText(ctx, rest, CW, BODY_FONT);
+        for (let i = 0; i < wrapped.length; i++) {
+          y += LINE_H;
+          ctx.fillText(wrapped[i], PAD, y);
+        }
+      }
+    }
+  }
+
+  // Draw feature: bold name + wrapped description
+  function featureBlock(name, desc) {
+    ctx.font = BOLD_FONT;
+    ctx.fillStyle = BLACK;
+    const nameW = ctx.measureText(name + ' ').width;
+    ctx.font = BODY_FONT;
+    const descWords = (desc || '').split(/\s+/).filter(function(w) { return w; });
+    if (descWords.length === 0) {
+      y += LINE_H;
+      ctx.font = BOLD_FONT;
+      ctx.fillText(name, PAD, y);
+      return;
+    }
+    // First line: bold name + start of desc
+    let firstPart = '';
+    let wi = 0;
+    ctx.font = BODY_FONT;
+    while (wi < descWords.length) {
+      const test = firstPart ? firstPart + ' ' + descWords[wi] : descWords[wi];
+      if (ctx.measureText(test).width > CW - nameW - 2 && firstPart) break;
+      firstPart = test;
+      wi++;
+    }
+    y += LINE_H;
+    ctx.font = BOLD_FONT;
+    ctx.fillText(name, PAD, y);
+    ctx.font = BODY_FONT;
+    ctx.fillText(' ' + firstPart, PAD + nameW, y);
+    const rest = descWords.slice(wi).join(' ');
+    if (rest) {
+      const wrapped = wrapCanvasText(ctx, rest, CW, BODY_FONT);
+      for (let i = 0; i < wrapped.length; i++) {
+        y += LINE_H;
+        ctx.fillText(wrapped[i], PAD, y);
+      }
+    }
+  }
+
+  // Draw section header (e.g., "Actions")
+  function sectionHeader(text) {
+    y += 4;
+    ctx.font = HEADER_FONT;
+    ctx.fillStyle = RED;
+    ctx.fillText(text, PAD, y + LINE_H);
+    y += LINE_H + 2;
+    ctx.fillStyle = BLACK;
+  }
+
+  // ── 1. Name header bar ──
+  ctx.font = 'bold 18px Georgia, "Times New Roman", serif';
+  const nameH = 30;
+  ctx.fillStyle = RED;
+  ctx.fillRect(0, 0, W, nameH);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillText(t.name || 'Unnamed', PAD, 21);
+  y = nameH;
+
+  // Subheader: size type, alignment
+  const subParts = [];
+  if (t.size) subParts.push(t.size);
+  if (t.type) subParts.push(t.type);
+  let subLine = subParts.join(' ');
+  if (t.alignment) subLine += (subLine ? ', ' : '') + t.alignment;
+  if (subLine) {
+    y += 14;
+    ctx.font = ITALIC_FONT;
+    ctx.fillStyle = BLACK;
+    ctx.fillText(subLine, PAD, y);
+    y += 2;
+  }
+
+  // ── 2. AC, HP, Speed ──
+  divider();
+  labelLine('Armor Class', t.ac + (t.acNote ? ' (' + t.acNote + ')' : ''));
+  labelLine('Hit Points', t.hpMax + (t.hpFormula ? ' (' + t.hpFormula + ')' : ''));
+  if (t.speed) labelLine('Speed', t.speed);
+
+  // ── 3. Ability score table ──
+  divider();
+  const colW = CW / 6;
+  // Headers
+  y += 12;
+  ctx.font = TABLE_BOLD;
+  ctx.fillStyle = RED;
+  ABILITIES.forEach(function(ab, i) {
+    const label = ab.toUpperCase();
+    const lw = ctx.measureText(label).width;
+    ctx.fillText(label, PAD + i * colW + (colW - lw) / 2, y);
+  });
+  // Values
+  y += 14;
+  ctx.font = TABLE_FONT;
+  ctx.fillStyle = BLACK;
+  ABILITIES.forEach(function(ab, i) {
+    const score = t.abilities[ab];
+    const text = score + ' (' + modStr(score) + ')';
+    const tw = ctx.measureText(text).width;
+    ctx.fillText(text, PAD + i * colW + (colW - tw) / 2, y);
+  });
+
+  // ── 4. Properties ──
+  divider();
+  if (t.savingThrows && t.savingThrows.length > 0) {
+    labelLine('Saving Throws', t.savingThrows.map(function(st) {
+      return st.ability.charAt(0).toUpperCase() + st.ability.slice(1) + ' ' + (st.bonus >= 0 ? '+' : '') + st.bonus;
+    }).join(', '));
+  }
+  if (t.skills && t.skills.length > 0) {
+    labelLine('Skills', t.skills.map(function(sk) {
+      return sk.name + ' ' + (sk.bonus >= 0 ? '+' : '') + sk.bonus;
+    }).join(', '));
+  }
+  if (t.damageResistances) labelLine('Damage Resistances', t.damageResistances);
+  if (t.damageImmunities) labelLine('Damage Immunities', t.damageImmunities);
+  if (t.damageVulnerabilities) labelLine('Damage Vulnerabilities', t.damageVulnerabilities);
+  if (t.conditionImmunities) labelLine('Condition Immunities', t.conditionImmunities);
+  const pp = getPassivePerception(t);
+  let sensesVal = t.senses || '';
+  if (sensesVal && sensesVal.toLowerCase().indexOf('passive perception') === -1) {
+    sensesVal += ', passive Perception ' + pp;
+  } else if (!sensesVal) {
+    sensesVal = 'passive Perception ' + pp;
+  }
+  labelLine('Senses', sensesVal);
+  if (t.languages) labelLine('Languages', t.languages);
+  if (t.cr) labelLine('Challenge', t.cr);
+
+  // ── 5. Features ──
+  // Categorize
+  const regFeats = [];
+  const rxnFeats = [];
+  const baFeats = [];
+  (t.features || []).forEach(function(f) {
+    if (f.name && f.name.indexOf('(Reaction)') !== -1) rxnFeats.push(f);
+    else if (f.name && f.name.indexOf('(Bonus Action)') !== -1) baFeats.push(f);
+    else regFeats.push(f);
+  });
+  // Synthesize LR
+  if (t.legendaryResistances > 0 && !regFeats.some(function(f) { return f.name && f.name.indexOf('Legendary Resistance') !== -1; })) {
+    regFeats.unshift({
+      name: 'Legendary Resistance (' + t.legendaryResistances + '/Day)',
+      desc: 'If ' + (t.name || 'the creature') + ' fails a saving throw, it can choose to succeed instead.'
+    });
+  }
+
+  if (regFeats.length > 0) {
+    divider();
+    regFeats.forEach(function(f) {
+      let name = f.name || 'Unnamed';
+      if (f.recharge) name += ' (Recharge ' + f.recharge + ')';
+      else if (f.usesMax && f.usesMax > 0 && name.indexOf('/Day') === -1) name += ' (' + f.usesMax + '/Day)';
+      featureBlock(name + '.', f.desc);
+      y += 4;
+    });
+  }
+
+  // ── 6. Actions ──
+  const hasActions = t.multiattack || (t.attacks && t.attacks.length > 0);
+  if (hasActions) {
+    divider();
+    sectionHeader('Actions');
+    if (t.multiattack) {
+      featureBlock('Multiattack.', t.multiattack);
+      y += 4;
+    }
+    (t.attacks || []).forEach(function(atk) {
+      let desc = '';
+      if (atk.bonus !== undefined && atk.bonus !== null) {
+        desc += (atk.bonus >= 0 ? '+' : '') + atk.bonus + ' to hit';
+        if (atk.note) desc += ', ' + atk.note;
+        if (!desc.endsWith('.')) desc += '.';
+      }
+      if (atk.damages && atk.damages.length > 0) {
+        const parts = atk.damages.map(function(d) {
+          let p = d.dice + ' ' + d.type;
+          if (d.note) p += ' (' + d.note + ')';
+          return p;
+        });
+        desc += ' Hit: ' + parts.join(' plus ') + ' damage.';
+      }
+      featureBlock(atk.name + '.', desc);
+      y += 4;
+    });
+  }
+
+  // ── 7. Bonus Actions ──
+  if (baFeats.length > 0) {
+    divider();
+    sectionHeader('Bonus Actions');
+    baFeats.forEach(function(f) {
+      let name = (f.name || '').replace(/\s*\(Bonus Action\)/, '');
+      if (f.recharge) name += ' (Recharge ' + f.recharge + ')';
+      else if (f.usesMax && f.usesMax > 0) name += ' (' + f.usesMax + '/Day)';
+      featureBlock(name + '.', f.desc);
+      y += 4;
+    });
+  }
+
+  // ── 8. Reactions ──
+  if (rxnFeats.length > 0) {
+    divider();
+    sectionHeader('Reactions');
+    rxnFeats.forEach(function(f) {
+      let name = (f.name || '').replace(/\s*\(Reaction\)/, '');
+      if (f.recharge) name += ' (Recharge ' + f.recharge + ')';
+      else if (f.usesMax && f.usesMax > 0) name += ' (' + f.usesMax + '/Day)';
+      featureBlock(name + '.', f.desc);
+      y += 4;
+    });
+  }
+
+  // ── 9. Legendary Actions ──
+  if (t.legendaryActionBudget > 0 && t.legendaryActions && t.legendaryActions.length > 0) {
+    divider();
+    sectionHeader('Legendary Actions');
+    // Intro text
+    const introText = (t.name || 'The creature') + ' can take ' + t.legendaryActionBudget +
+      ' legendary action' + (t.legendaryActionBudget !== 1 ? 's' : '') +
+      ', choosing from the options below. Only one legendary action option can be used at a time and only at the end of another creature\'s turn. ' +
+      (t.name || 'The creature') + ' regains spent legendary actions at the start of its turn.';
+    const introLines = wrapCanvasText(ctx, introText, CW, ITALIC_FONT);
+    ctx.font = ITALIC_FONT;
+    ctx.fillStyle = BLACK;
+    introLines.forEach(function(line) {
+      y += LINE_H;
+      ctx.fillText(line, PAD, y);
+    });
+    y += 6;
+    t.legendaryActions.forEach(function(la) {
+      let name = la.name || 'Unnamed';
+      if (la.cost > 1) name += ' (Costs ' + la.cost + ' Actions)';
+      featureBlock(name + '.', la.desc);
+      y += 4;
+    });
+  }
+
+  // ── Bottom border ──
+  y += 8;
+  ctx.fillStyle = RED;
+  ctx.fillRect(0, y, W, 3);
+  y += 3;
+
+  // Crop to actual height
+  const finalCanvas = document.createElement('canvas');
+  finalCanvas.width = W;
+  finalCanvas.height = y;
+  const fctx = finalCanvas.getContext('2d');
+  fctx.drawImage(canvas, 0, 0, W, y, 0, 0, W, y);
+  return finalCanvas;
+}
+
+function templateToMarkdown(t) {
+  const lines = [];
+
+  // Header
+  lines.push('# ' + (t.name || 'Unnamed'));
+  const subParts = [];
+  if (t.size) subParts.push(t.size);
+  if (t.type) subParts.push(t.type);
+  const sub = subParts.join(' ');
+  if (sub || t.alignment) {
+    lines.push('*' + sub + (t.alignment ? ', ' + t.alignment : '') + '*');
+  }
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  // Core stats
+  lines.push('**Armor Class** ' + t.ac + (t.acNote ? ' (' + t.acNote + ')' : ''));
+  lines.push('**Hit Points** ' + t.hpMax + (t.hpFormula ? ' (' + t.hpFormula + ')' : ''));
+  if (t.speed) lines.push('**Speed** ' + t.speed);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  // Ability score table
+  lines.push('| STR | DEX | CON | INT | WIS | CHA |');
+  lines.push('|:---:|:---:|:---:|:---:|:---:|:---:|');
+  lines.push('| ' + ABILITIES.map(function(ab) {
+    return t.abilities[ab] + ' (' + modStr(t.abilities[ab]) + ')';
+  }).join(' | ') + ' |');
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  // Properties (only include non-empty)
+  if (t.savingThrows && t.savingThrows.length > 0) {
+    lines.push('**Saving Throws** ' + t.savingThrows.map(function(st) {
+      const label = st.ability.charAt(0).toUpperCase() + st.ability.slice(1);
+      return label + ' ' + (st.bonus >= 0 ? '+' : '') + st.bonus;
+    }).join(', '));
+  }
+  if (t.skills && t.skills.length > 0) {
+    lines.push('**Skills** ' + t.skills.map(function(sk) {
+      return sk.name + ' ' + (sk.bonus >= 0 ? '+' : '') + sk.bonus;
+    }).join(', '));
+  }
+  if (t.damageResistances) lines.push('**Damage Resistances** ' + t.damageResistances);
+  if (t.damageImmunities) lines.push('**Damage Immunities** ' + t.damageImmunities);
+  if (t.damageVulnerabilities) lines.push('**Damage Vulnerabilities** ' + t.damageVulnerabilities);
+  if (t.conditionImmunities) lines.push('**Condition Immunities** ' + t.conditionImmunities);
+
+  // Senses (append passive perception if not already present)
+  const pp = getPassivePerception(t);
+  let sensesLine = t.senses || '';
+  if (sensesLine && sensesLine.toLowerCase().indexOf('passive perception') === -1) {
+    sensesLine += ', passive Perception ' + pp;
+  } else if (!sensesLine) {
+    sensesLine = 'passive Perception ' + pp;
+  }
+  lines.push('**Senses** ' + sensesLine);
+
+  if (t.languages) lines.push('**Languages** ' + t.languages);
+  if (t.cr) lines.push('**Challenge** ' + t.cr);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  // Categorize features
+  const regularFeatures = [];
+  const reactions = [];
+  const bonusActions = [];
+  (t.features || []).forEach(function(f) {
+    if (f.name && f.name.indexOf('(Reaction)') !== -1) reactions.push(f);
+    else if (f.name && f.name.indexOf('(Bonus Action)') !== -1) bonusActions.push(f);
+    else regularFeatures.push(f);
+  });
+
+  // Synthesize Legendary Resistance as a feature if needed
+  if (t.legendaryResistances > 0) {
+    const hasLR = regularFeatures.some(function(f) { return f.name && f.name.indexOf('Legendary Resistance') !== -1; });
+    if (!hasLR) {
+      regularFeatures.unshift({
+        name: 'Legendary Resistance (' + t.legendaryResistances + '/Day)',
+        desc: 'If ' + (t.name || 'the creature') + ' fails a saving throw, it can choose to succeed instead.',
+        recharge: null, usesMax: null
+      });
+    }
+  }
+
+  // Helper for feature line formatting
+  function featureLine(f, stripAnnotation) {
+    let name = f.name || 'Unnamed';
+    if (stripAnnotation) name = name.replace(/\s*\(Reaction\)/, '').replace(/\s*\(Bonus Action\)/, '');
+    let line = '**' + name;
+    if (f.recharge) {
+      line += ' (Recharge ' + f.recharge + ')';
+    } else if (f.usesMax && f.usesMax > 0) {
+      line += ' (' + f.usesMax + '/Day)';
+    }
+    line += '.** ' + (f.desc || '');
+    return line;
+  }
+
+  // Regular features
+  regularFeatures.forEach(function(f) {
+    lines.push(featureLine(f, false));
+    lines.push('');
+  });
+
+  // Actions
+  const hasActions = t.multiattack || (t.attacks && t.attacks.length > 0);
+  if (hasActions) {
+    lines.push('### Actions');
+    lines.push('');
+    if (t.multiattack) {
+      lines.push('**Multiattack.** ' + t.multiattack);
+      lines.push('');
+    }
+    (t.attacks || []).forEach(function(atk) {
+      let line = '**' + atk.name + '.** ';
+      if (atk.bonus !== undefined && atk.bonus !== null) {
+        line += (atk.bonus >= 0 ? '+' : '') + atk.bonus + ' to hit';
+        if (atk.note) line += ', ' + atk.note;
+        if (!line.endsWith('.')) line += '.';
+      }
+      if (atk.damages && atk.damages.length > 0) {
+        const parts = atk.damages.map(function(d) {
+          let part = d.dice + ' ' + d.type;
+          if (d.note) part += ' (' + d.note + ')';
+          return part;
+        });
+        line += ' *Hit:* ' + parts.join(' plus ') + ' damage.';
+      }
+      lines.push(line);
+      lines.push('');
+    });
+  }
+
+  // Bonus Actions
+  if (bonusActions.length > 0) {
+    lines.push('### Bonus Actions');
+    lines.push('');
+    bonusActions.forEach(function(f) {
+      lines.push(featureLine(f, true));
+      lines.push('');
+    });
+  }
+
+  // Reactions
+  if (reactions.length > 0) {
+    lines.push('### Reactions');
+    lines.push('');
+    reactions.forEach(function(f) {
+      lines.push(featureLine(f, true));
+      lines.push('');
+    });
+  }
+
+  // Legendary Actions
+  if (t.legendaryActionBudget > 0 && t.legendaryActions && t.legendaryActions.length > 0) {
+    lines.push('### Legendary Actions');
+    lines.push('');
+    lines.push((t.name || 'The creature') + ' can take ' + t.legendaryActionBudget +
+      ' legendary action' + (t.legendaryActionBudget !== 1 ? 's' : '') +
+      ', choosing from the options below. Only one legendary action option can be used at a time and only at the end of another creature\'s turn. ' +
+      (t.name || 'The creature') + ' regains spent legendary actions at the start of its turn.');
+    lines.push('');
+    t.legendaryActions.forEach(function(la) {
+      let line = '**' + la.name;
+      if (la.cost > 1) line += ' (Costs ' + la.cost + ' Actions)';
+      line += '.** ' + (la.desc || '');
+      lines.push(line);
+      lines.push('');
+    });
+  }
+
+  // Descriptions (if present)
+  if (t.tactics || t.playerDescription || t.dmDescription) {
+    lines.push('---');
+    lines.push('');
+    if (t.playerDescription) {
+      lines.push('**Description.** ' + t.playerDescription);
+      lines.push('');
+    }
+    if (t.dmDescription) {
+      lines.push('**DM Notes.** ' + t.dmDescription);
+      lines.push('');
+    }
+    if (t.tactics) {
+      lines.push('**Tactics.** ' + t.tactics);
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+}
+
 // ── Monster Import / Export ──
 
-async function exportMonster(id) {
+function exportMonster(id) {
   const t = state.templates.find(t => t.id === id);
   if (!t) { setStatus('Monster not found.', 'error'); return; }
+  _exportTargetId = id;
+  showExportMonsterModal(t);
+}
+
+function showExportMonsterModal(template) {
+  const bodyHtml =
+    '<div class="modal-toggle-group">' +
+    '<button id="exportModeEM" class="active" onclick="switchExportMode(\'em\')">EncounterManager</button>' +
+    '<button id="exportModeJSON" onclick="switchExportMode(\'json\')">JSON</button>' +
+    '<button id="exportModeMD" onclick="switchExportMode(\'md\')">Markdown</button>' +
+    '<button id="exportModeImage" onclick="switchExportMode(\'image\')">Image</button>' +
+    '</div>' +
+    '<p id="exportDesc" class="text-muted-sm" style="margin-bottom:0.75rem">Compressed .squishtext format. Importable by EncounterManager.</p>' +
+    '<div class="flex-row-end">' +
+    '<button class="btn-sm" onclick="document.getElementById(\'exportModal\').remove()">Cancel</button>' +
+    '<button class="btn-sm btn-action" onclick="doExportMonster()">Download</button>' +
+    '</div>';
+  createModal('exportModal', 'Export: ' + esc(template.name), bodyHtml, { wide: true });
+}
+
+function switchExportMode(mode) {
+  const modes = { em: 'exportModeEM', json: 'exportModeJSON', md: 'exportModeMD', image: 'exportModeImage' };
+  Object.keys(modes).forEach(function(key) {
+    const el = document.getElementById(modes[key]);
+    if (el) el.className = key === mode ? 'active' : '';
+  });
+  const desc = document.getElementById('exportDesc');
+  if (desc) {
+    const descriptions = {
+      em: 'Compressed .squishtext format. Importable by EncounterManager.',
+      json: 'Uncompressed JSON. Human-readable and importable.',
+      md: 'Formatted D&D stat block as plain text.',
+      image: 'Canvas-rendered stat block as PNG image.'
+    };
+    desc.textContent = descriptions[mode] || '';
+  }
+}
+
+async function doExportMonster() {
+  const t = state.templates.find(t => t.id === _exportTargetId);
+  if (!t) { setStatus('Monster not found.', 'error'); return; }
+  const safeName = (t.name || 'monster').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  // Determine active mode
+  let mode = 'em';
+  if (document.getElementById('exportModeJSON') && document.getElementById('exportModeJSON').className === 'active') mode = 'json';
+  else if (document.getElementById('exportModeMD') && document.getElementById('exportModeMD').className === 'active') mode = 'md';
+  else if (document.getElementById('exportModeImage') && document.getElementById('exportModeImage').className === 'active') mode = 'image';
+
   try {
-    const payload = { version: 1, exported: new Date().toISOString(), templates: [t] };
-    const json = JSON.stringify(payload);
-    const compressed = await compress(json);
-    const header = '[SquishText] To decode, base64-decode the string below then inflate (deflate-raw). Or paste at https://promptferret.github.io/SquishText/\n';
-    const file = new Blob([header + compressed], { type: 'text/plain' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(file);
-    a.download = (t.name || 'monster').replace(/[^a-zA-Z0-9_-]/g, '_') + '.squishtext';
-    a.click();
-    URL.revokeObjectURL(a.href);
-    setStatus('Exported: ' + t.name, 'success');
+    const envelope = { format: 'encounter-manager', version: 1, exported: new Date().toISOString(), templates: [t] };
+
+    if (mode === 'em') {
+      const compressed = await compress(JSON.stringify(envelope));
+      const header = '[SquishText] To decode, base64-decode the string below then inflate (deflate-raw). Or paste at https://promptferret.github.io/SquishText/\n';
+      downloadBlob(new Blob([header + compressed], { type: 'text/plain;charset=utf-8' }), safeName + '.squishtext');
+    } else if (mode === 'json') {
+      downloadBlob(new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json;charset=utf-8' }), safeName + '.json');
+    } else if (mode === 'md') {
+      if (typeof templateToMarkdown !== 'function') { setStatus('Markdown export not yet available.', 'warning'); return; }
+      downloadBlob(new Blob([templateToMarkdown(t)], { type: 'text/markdown;charset=utf-8' }), safeName + '.md');
+    } else if (mode === 'image') {
+      if (typeof templateToCanvas !== 'function') { setStatus('Image export not yet available.', 'warning'); return; }
+      const canvas = templateToCanvas(t);
+      canvas.toBlob(function(blob) {
+        downloadBlob(blob, safeName + '.png');
+      }, 'image/png');
+    }
+    const modal = document.getElementById('exportModal');
+    if (modal) modal.remove();
+    setStatus('Exported: ' + t.name + ' (' + { em: 'EncounterManager', json: 'JSON', md: 'Markdown', image: 'Image' }[mode] + ')', 'success');
   } catch (e) {
     setStatus('Export failed: ' + e.message, 'error');
   }
@@ -5722,12 +6329,12 @@ async function exportMonster(id) {
 function showImportMonsterDialog() {
   const bodyHtml =
     '<div class="modal-toggle-group">' +
-    '<button id="importModeSquishtext" class="active" onclick="switchImportMode(\'squishtext\')">SquishText</button>' +
+    '<button id="importModeEM" class="active" onclick="switchImportMode(\'em\')">EncounterManager</button>' +
     '<button id="importMode5etools" onclick="switchImportMode(\'5etools\')">5etools</button>' +
     '</div>' +
     '<div id="importBody">' +
-    '<p class="text-muted-sm" style="margin-bottom:0.75rem">Select one or more .squishtext files containing monster templates.</p>' +
-    '<input type="file" id="importFileInput" accept=".squishtext" multiple style="margin-bottom:1rem;font-size:0.8rem;color:var(--text)">' +
+    '<p class="text-muted-sm" style="margin-bottom:0.75rem">Select one or more .squishtext or .json files containing monster templates.</p>' +
+    '<input type="file" id="importFileInput" accept=".squishtext,.json" multiple style="margin-bottom:1rem;font-size:0.8rem;color:var(--text)">' +
     '<p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:1rem">New monsters will be added. Existing monsters are kept (duplicates skipped by ID).</p>' +
     '</div>' +
     '<div class="flex-row-end">' +
@@ -5738,18 +6345,18 @@ function showImportMonsterDialog() {
 }
 
 function switchImportMode(mode) {
-  const activeId = mode === 'squishtext' ? 'importModeSquishtext' : 'importMode5etools';
-  ['importModeSquishtext', 'importMode5etools'].forEach(function(id) {
+  const activeId = mode === 'em' ? 'importModeEM' : 'importMode5etools';
+  ['importModeEM', 'importMode5etools'].forEach(function(id) {
     const el = document.getElementById(id);
     if (el) el.className = id === activeId ? 'active' : '';
   });
   const body = document.getElementById('importBody');
   if (!body) return;
   const inputStyle = 'padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.85rem';
-  if (mode === 'squishtext') {
+  if (mode === 'em') {
     body.innerHTML =
-      '<p class="text-muted-sm" style="margin-bottom:0.75rem">Select one or more .squishtext files containing monster templates.</p>' +
-      '<input type="file" id="importFileInput" accept=".squishtext" multiple style="margin-bottom:1rem;font-size:0.8rem;color:var(--text)">' +
+      '<p class="text-muted-sm" style="margin-bottom:0.75rem">Select one or more .squishtext or .json files containing monster templates.</p>' +
+      '<input type="file" id="importFileInput" accept=".squishtext,.json" multiple style="margin-bottom:1rem;font-size:0.8rem;color:var(--text)">' +
       '<p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:1rem">New monsters will be added. Existing monsters are kept (duplicates skipped by ID).</p>';
   } else if (mode === '5etools') {
     body.innerHTML =
@@ -5805,7 +6412,7 @@ async function doImportMonster() {
         });
       }
     } else {
-      // SquishText mode (original behavior)
+      // EncounterManager mode (squishtext or json files)
       for (const file of fileInput.files) {
         const text = await file.text();
         let data;

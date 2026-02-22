@@ -779,15 +779,137 @@ Detection and parsing:
 - `initiative.advantageMode: "adv"` → set `initAdvantage: true`
 - `initiative` as plain number → use as flat init bonus directly
 
+## Phase 8 - Export Enhancements & Import Update
+
+### Overview
+
+Expand monster export from single-format (SquishText only) to four formats, rebrand "SquishText" to "EncounterManager" in the UI, add a `format` watermark to exports, and update import to accept both `.squishtext` and `.json` files in EncounterManager mode.
+
+### 8.1 - Export Modal & Format Watermark
+
+**Current**: Export button on monster card downloads `.squishtext` immediately (one click).
+
+**New**: Export button opens a modal with a four-segment toggle group and a Download button.
+
+Toggle group: `[EncounterManager] [JSON] [Markdown] [Image]`
+
+- **EncounterManager** (.squishtext) - current compressed format, for sharing/backup
+- **JSON** (.json) - same envelope as SquishText but uncompressed, for scripting/AI workflows
+- **Markdown** (.md) - formatted stat block text, for pasting into AI chats or notes
+- **Image** (.png) - canvas-rendered D&D-style stat block card
+
+**Format watermark**: Add `"format": "encounter-manager"` to the export envelope (both SquishText and JSON):
+
+```json
+{
+  "format": "encounter-manager",
+  "version": 1,
+  "exported": "2026-02-22T...",
+  "templates": [...]
+}
+```
+
+Existing exports without `format` field still import fine (backward compat).
+
+Save Backup also gets the `format` field in its envelope.
+
+### 8.2 - Import Update
+
+**Current**: Import modal toggle is `[SquishText] [5etools]`.
+
+**New**: Toggle becomes `[EncounterManager] [5etools]`.
+
+EncounterManager mode accepts both `.squishtext` and `.json` files in the same file picker:
+- `.squishtext` files: decompress as before
+- `.json` files: parse directly
+- Both validated by checking for `format: "encounter-manager"` or the existing `version` + `templates` structure
+- Auto-detection still routes 5etools JSON to the 5etools parser (no `format` field + has `monster` array or 5etools fields)
+
+### 8.3 - Markdown Export
+
+Generate a readable D&D stat block in markdown format. Pure function: `templateToMarkdown(template) → string`.
+
+Output format (standard stat block layout):
+
+```markdown
+# Minotaur
+
+*Large Monstrosity, Chaotic Evil*
+
+---
+
+**Armor Class** 14 (natural armor)
+**Hit Points** 76 (9d10+27)
+**Speed** 40 ft.
+
+---
+
+| STR | DEX | CON | INT | WIS | CHA |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| 18 (+4) | 11 (+0) | 16 (+3) | 6 (-2) | 16 (+3) | 9 (-1) |
+
+---
+
+**Skills** Perception +7
+**Senses** darkvision 60 ft., passive Perception 17
+**Languages** Abyssal
+**Challenge** 3
+
+---
+
+**Charge.** If the minotaur moves at least 10 feet...
+
+**Reckless.** At the start of its turn...
+
+### Actions
+
+**Multiattack.** One gore attack and one greataxe attack.
+
+**Greataxe.** *Melee Weapon Attack:* +6 to hit. *Hit:* 2d12+4 slashing damage.
+
+**Gore.** *Melee Weapon Attack:* +6 to hit. *Hit:* 2d8+4 piercing damage.
+```
+
+Include sections only when populated: Saving Throws, Skills, Damage Resistances/Immunities/Vulnerabilities, Condition Immunities, Senses, Languages, Features, Actions (Multiattack + Attacks), Legendary Actions, Reactions/Bonus Actions (features with those annotations).
+
+Downloaded as `MonsterName.md`.
+
+### 8.4 - Image Export (Canvas Stat Block)
+
+Render the monster stat block as a PNG image using the Canvas API. Pure function: `templateToCanvas(template) → canvas`.
+
+**Visual style**: Classic D&D stat block aesthetic - parchment/cream background, dark red header bars, serif font for body text, bold for labels.
+
+**Layout sections** (top to bottom):
+1. Name + size/type/alignment header (red background, white text)
+2. AC, HP, Speed (red divider above)
+3. Ability score table (red divider above)
+4. Proficiencies, resistances, senses, languages, CR (red divider above)
+5. Features (red divider above)
+6. Actions header + multiattack + attacks (red divider above)
+7. Legendary Actions (if any, red divider above)
+
+**Implementation approach**:
+- Create an offscreen canvas
+- First pass: measure all text to calculate total height (dynamic - varies by content)
+- Second pass: draw everything at calculated positions
+- Use `canvas.toBlob('image/png')` to trigger download
+
+**Fonts**: Use system serif (Georgia/Times) for body, system sans-serif for headers. No web fonts needed.
+
+**Width**: Fixed (e.g., 400px), height dynamic based on content.
+
+Downloaded as `MonsterName.png`.
+
 ## Future Phases
 
-### Phase 8 - CritterDB Importer
+### Phase 9 - CritterDB Importer
 - Discovery: investigate CritterDB JSON export format
 - Data mapping: map CritterDB fields to canonical template schema
 - Pure function: `importCritterDB(json) → template[]`
 - UI: integrate into Import Monster modal
 
-### Phase 9 - Bestiary Builder Importer
+### Phase 10 - Bestiary Builder Importer
 - Discovery: investigate Bestiary Builder JSON export format
 - Data mapping: map fields to canonical template schema
 - Pure function: `importBestiaryBuilder(json) → template[]`
