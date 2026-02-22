@@ -433,38 +433,30 @@ Input + Roll button, results area (newest first, max 50), Clear + Close buttons.
 #### New Functions
 `parseDiceExpression()`, `evalDiceNode()`, `rollDiceExpression()`, `showDiceRoller()`, `doDiceRoll()`, `renderDiceRollerResults()`. Global: `diceRollerHistory[]`.
 
-### Phase 6 - Refactor
+### Phase 6 - Refactor (done)
 
-Code quality pass. The codebase was built incrementally across Phases 1-5.3 and accumulated technical debt. This phase cleans it up without changing any user-facing behavior.
+Code quality pass. Zero user-facing behavior changes.
 
-#### 6.1 - Unify Dice Engines
-Remove old `rollDice()` (simple NdN+M regex). Adapt all ~30 combat call sites to use the new recursive descent parser (`parseDiceExpression`/`evalDiceNode`). Single dice engine for everything.
+#### 6.1 - Null Guards (done)
+Created `getCombatant(idx)` helper that validates combat exists and idx is in range. Replaced all 29 `getActiveCombat().combatants[idx]` patterns with `getCombatant(idx)` + early return. Fixed `toggleReaction()` double `getActiveCombat()` call.
 
-#### 6.2 - Consolidate Global State
-Replace 17 top-level variables with organized objects:
-- `editState = { mode, selected, lockedTemplateId, formData, visible, rawTemplate, formSnapshot, conflicts }`
-- Group form state: `formState = { mode, data, savedSnapshot }`
-- Keep `state` (persistent) and `activeCombatId`/`autoExpandedId` (preferences) as-is
+#### 6.2 - Unify Dice Engines (done)
+Modified `evalDiceNode()` to propagate raw `rolls` array through all node types (dice, number, paren, binop). Updated `rollDiceExpression()` to pass through `rolls`. Replaced old regex-based `rollDice()` with a thin wrapper that delegates to the new recursive descent parser. `rollAttack()` crit detection works because `result.rolls` still contains raw d20 values.
 
-#### 6.3 - var to const/let Sweep
-Replace all ~216 `var` declarations with `const` or `let`. Use `const` by default, `let` only when reassigned.
+#### 6.3 - var to const/let Sweep (done)
+Converted all ~220 `var` declarations to `const` (never reassigned) or `let` (reassigned). Two global vars (`diceRollerHistory`, `rollPopupState`) converted to `let`. Zero `var` remaining in JS code; CSS `var(--...)` untouched.
 
-#### 6.4 - Extract Render Helpers
-Deduplicate repeated rendering patterns:
-- `renderHpBar(current, max, temp)` - used in monster rows, ad-hoc rows, detail panels (3 copies)
-- `renderCopyButton(text, label)` - used 7+ times
-- `createModal(id, title, bodyHtml, buttons)` - used in add combatant, dice roller, import dialogs (3+ copies)
-- `renderFormField(label, inputHtml)` - unify 3 different form field patterns
+#### 6.4 - Consolidate Global State (done)
+8 edit-mode globals (`editMode`, `editSelected`, `editLockedTemplateId`, `editFormData`, `editFormVisible`, `editRawTemplate`, `editFormSnapshot`, `editConflicts`) consolidated into `editState` object. 3 form globals (`formMode`, `formData`, `savedFormSnapshot`) consolidated into `formState` object. All 155+ references updated including inline `onchange` handlers in HTML strings.
 
-#### 6.5 - Break Up Mega-Functions
-Split the 4 largest functions into focused sub-functions:
-- `renderActiveCombat()` (195 lines) → `renderCombatBar()`, `renderCombatInfo()`, `renderCombatantRows()`
-- `renderCombatantDetail()` (357 lines) → `renderMonsterDetail()`, `renderPlayerDetail()`, `renderAdhocDetail()`, `renderConditionsSection()`, `renderTacticsAccordion()`
-- `renderTemplateForm()` (308 lines) → extract `renderAbilityGrid()`, `renderSaveGrid()`, `renderSkillGrid()`, `renderAttackSection()`, `renderFeatureSection()`
-- `renderEditOverrideForm()` (217 lines) → reuse the same extracted helpers with edit/revert wrappers
+#### 6.5 - Extract Render Helpers (done)
+Three helpers extracted: `getCombatantHp(c, template)` resolves maxHp consistently, `renderHpBar(curHp, maxHp, tempHp)` deduplicates HP bar rendering (was 2 copies), `createModal(id, title, bodyHtml, opts)` unifies modal creation (was 3 copies - add combatant, import, dice roller).
 
-#### 6.6 - Null Guards and Error Handling
-Add guards to combat accessors. `getActiveCombat().combatants[idx]` appears in many places without null checks. Add early returns to prevent crashes on bad state.
+#### 6.6 - Break Up Mega-Functions (done)
+`renderActiveCombat()` split into `renderCombatBar()`, `renderCombatInfo()`, `renderCombatantRow()` with orchestrator. `renderCombatantDetail()` split into `renderMonsterDetail()`, `renderPlayerDetail()`, `renderAdhocDetail()` with type-routing. Template/edit forms kept intact (too tightly coupled for modest benefit).
+
+#### 6.7 - CSS Consolidation (done)
+8 utility classes added: `.flex-row`, `.flex-row-tight`, `.flex-row-end`, `.flex-col`, `.text-muted-sm`, `.text-dim-sm`, `.text-mono`, `.detail-label`. 22 inline style patterns replaced. One-off styles left inline.
 
 ## Future Phases
 

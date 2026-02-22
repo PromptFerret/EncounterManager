@@ -914,6 +914,7 @@
   }
   .dice-roller-entry:last-child { border-bottom: none; }
   .edit-field-conflict { opacity: 0.5; }
+  .edit-field-conflict::placeholder { color: var(--text-muted); opacity: 1; font-style: italic; }
   .btn-revert {
     font-size: 0.78rem;
     line-height: 1.16;
@@ -941,6 +942,16 @@
     .init-setup-row > span:nth-child(3) { display: none; }
     .detail-grid { grid-template-columns: 1fr; }
   }
+
+  /* ── Utility Classes ── */
+  .flex-row { display: flex; gap: 0.5rem; align-items: center; }
+  .flex-row-tight { display: flex; gap: 0.3rem; align-items: center; }
+  .flex-row-end { display: flex; gap: 0.5rem; justify-content: flex-end; }
+  .flex-col { display: flex; flex-direction: column; gap: 0.5rem; }
+  .text-muted-sm { font-size: 0.78rem; color: var(--text-muted); }
+  .text-dim-sm { font-size: 0.72rem; color: var(--text-dim); }
+  .text-mono { font-family: var(--mono); font-size: 0.82rem; }
+  .detail-label { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.3rem; }
 </style>
 </head>
 <body>
@@ -1024,27 +1035,33 @@ let state = {
 };
 
 let currentView = 'templates';
-let formMode = null;   // null = list, 'template' = editing template, 'encounter' = editing encounter, 'party' = editing party
-let formData = null;   // working copy of the item being edited
-let savedFormSnapshot = null; // snapshot of formData at last save, for dirty checking
+let formState = { mode: null, data: null, savedSnapshot: null }; // mode: null=list, 'template'/'encounter'/'party'; data: working copy; savedSnapshot: for dirty checking
 let searchQuery = '';
 let activeCombatId = null; // ID of the combat currently being viewed (persisted in preferences)
 let autoExpandedId = null; // combatant ID that was auto-expanded on turn start (persisted in preferences)
 
 // ── Edit Mode (Combat Overrides) ──
-let editMode = false;              // edit mode toggle active
-let editSelected = [];             // array of combatant IDs selected for editing
-let editLockedTemplateId = null;   // template ID locked on first checkbox selection
-let editFormData = null;           // working copy of template being edited
-let editFormVisible = false;       // is the edit form showing
-let editRawTemplate = null;        // raw template for diffing/revert
-let editFormSnapshot = null;       // snapshot of editFormData at open/save for dirty check
-let editConflicts = new Set();     // set of field paths where selected combatants disagree
-var diceRollerHistory = [];        // ephemeral roll history for the dice roller modal
+let editState = {
+  mode: false,              // edit mode toggle active
+  selected: [],             // array of combatant IDs selected for editing
+  lockedTemplateId: null,   // template ID locked on first checkbox selection
+  formData: null,           // working copy of template being edited
+  visible: false,           // is the edit form showing
+  rawTemplate: null,        // raw template for diffing/revert
+  formSnapshot: null,       // snapshot of formData at open/save for dirty check
+  conflicts: new Set()      // set of field paths where selected combatants disagree
+};
+let diceRollerHistory = [];        // ephemeral roll history for the dice roller modal
 
 function getActiveCombat() {
   if (!activeCombatId) return null;
   return state.combats.find(c => c.id === activeCombatId) || null;
+}
+
+function getCombatant(idx) {
+  const combat = getActiveCombat();
+  if (!combat || !combat.combatants || idx < 0 || idx >= combat.combatants.length) return null;
+  return combat.combatants[idx];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1065,7 +1082,7 @@ function setStatus(msg, type) {
 }
 
 function deepClone(obj) { return JSON.parse(JSON.stringify(obj)); }
-function isFormDirty() { return JSON.stringify(formData) !== JSON.stringify(savedFormSnapshot); }
+function isFormDirty() { return JSON.stringify(formState.data) !== JSON.stringify(formState.savedSnapshot); }
 
 function calcPassivePerception(t) {
   const wisMod = abilityMod(t.abilities.wis);
@@ -1078,17 +1095,17 @@ function getPassivePerception(t) {
 }
 
 function calcPassiveInvestigation(t) {
-  var skill = t.skills.find(function(s) { return s.name === 'Investigation'; });
+  const skill = t.skills.find(function(s) { return s.name === 'Investigation'; });
   return 10 + (skill ? skill.bonus : abilityMod(t.abilities.int));
 }
 
 function calcPassiveInsight(t) {
-  var skill = t.skills.find(function(s) { return s.name === 'Insight'; });
+  const skill = t.skills.find(function(s) { return s.name === 'Insight'; });
   return 10 + (skill ? skill.bonus : abilityMod(t.abilities.wis));
 }
 
 function updatePPDisplay() {
-  const auto = calcPassivePerception(formData);
+  const auto = calcPassivePerception(formState.data);
   const lbl = document.getElementById('pp_auto');
   const inp = document.getElementById('pp_input');
   if (lbl) lbl.textContent = auto;
@@ -1269,50 +1286,27 @@ function save(key) {
 // ── Dice Engine ──
 // ═══════════════════════════════════════════════════════════════
 
-function rollDice(notation, opts = {}) {
-  const match = notation.trim().match(/^(\d+)d(\d+)\s*([+-]\s*\d+)?$/i);
-  if (!match) return { rolls: [], modifier: 0, total: 0, text: 'Invalid: ' + notation };
-  const count = parseInt(match[1]);
-  const sides = parseInt(match[2]);
-  const modifier = match[3] ? parseInt(match[3].replace(/\s/g, '')) : 0;
-  const rolls = [];
-  for (let i = 0; i < count; i++) rolls.push(Math.floor(Math.random() * sides) + 1);
-
-  if (opts.advantage || opts.disadvantage) {
-    // For d20 rolls with adv/dis: roll twice, pick higher/lower
-    if (count === 1 && sides === 20) {
-      const second = Math.floor(Math.random() * 20) + 1;
-      const both = [rolls[0], second];
-      const pick = opts.advantage ? Math.max(...both) : Math.min(...both);
-      const label = opts.advantage ? 'adv' : 'dis';
-      return {
-        rolls: both, modifier, total: pick + modifier,
-        text: '[' + both.join(', ') + '] → ' + pick + (modifier ? (modifier > 0 ? ' + ' : ' - ') + Math.abs(modifier) + ' = ' + (pick + modifier) : '') + ' (' + label + ')'
-      };
-    }
-  }
-
-  const sum = rolls.reduce((a, b) => a + b, 0);
-  const total = sum + modifier;
-  let text = '[' + rolls.join(', ') + ']';
-  if (modifier) text += (modifier > 0 ? ' + ' : ' - ') + Math.abs(modifier) + ' = ' + total;
-  else if (rolls.length > 1) text += ' = ' + total;
-  return { rolls, modifier, total, text };
+function rollDice(notation, opts) {
+  const mode = opts && opts.advantage ? ' adv' : opts && opts.disadvantage ? ' dis' : '';
+  const result = rollDiceExpression(notation + mode);
+  if (result.error) return { rolls: [], modifier: 0, total: 0, text: 'Invalid: ' + notation };
+  return { rolls: result.rolls || [], modifier: 0, total: result.total, text: result.breakdown };
 }
 
 function renderDiceText(text, combatantIdx, sourceType, sourceIdx) {
   return text.replace(/(\d+d\d+(?:[+-]\d+)?)/gi, function(match) {
-    var args = combatantIdx + ',\'' + match + '\'';
+    let args = combatantIdx + ',\'' + match + '\'';
     if (sourceType !== undefined) args += ',\'' + sourceType + '\',' + sourceIdx;
     return '<span class="dice-link" onclick="event.stopPropagation();rollInlineDice(' + args + ')">' + match + '</span>';
   });
 }
 
 function rollInlineDice(combatantIdx, notation, sourceType, sourceIdx) {
-  const c = getActiveCombat().combatants[combatantIdx];
+  const c = getCombatant(combatantIdx);
+  if (!c) return;
   if (!c.rollLog) c.rollLog = [];
   const result = rollDice(notation);
-  var label = notation;
+  let label = notation;
   if (sourceType && sourceIdx !== undefined) {
     const template = getTemplate(c);
     if (template) {
@@ -1330,12 +1324,12 @@ function rollInlineDice(combatantIdx, notation, sourceType, sourceIdx) {
 // ═══════════════════════════════════════════════════════════════
 
 function parseDiceExpression(input) {
-  var expr = (input || '').trim();
+  let expr = (input || '').trim();
   if (!expr) return { ast: null, mode: null, error: 'Empty expression' };
 
   // Extract adv/dis suffix
-  var mode = null;
-  var suffixMatch = expr.match(/\s+(adv(?:antage)?|dis(?:advantage)?)\s*$/i);
+  let mode = null;
+  const suffixMatch = expr.match(/\s+(adv(?:antage)?|dis(?:advantage)?)\s*$/i);
   if (suffixMatch) {
     mode = suffixMatch[1].toLowerCase().startsWith('adv') ? 'advantage' : 'disadvantage';
     expr = expr.substring(0, suffixMatch.index);
@@ -1346,12 +1340,12 @@ function parseDiceExpression(input) {
   if (!expr) return { ast: null, mode: mode, error: 'Empty expression' };
 
   // Tokenize
-  var tokens = [];
-  var i = 0;
+  const tokens = [];
+  let i = 0;
   while (i < expr.length) {
-    var ch = expr[i];
+    const ch = expr[i];
     if (ch >= '0' && ch <= '9') {
-      var num = '';
+      let num = '';
       while (i < expr.length && expr[i] >= '0' && expr[i] <= '9') { num += expr[i]; i++; }
       tokens.push({ type: 'NUMBER', value: parseInt(num) });
     } else if (ch === 'd' || ch === 'D') {
@@ -1374,16 +1368,16 @@ function parseDiceExpression(input) {
   }
 
   // Recursive descent parser
-  var pos = 0;
+  let pos = 0;
   function peek() { return pos < tokens.length ? tokens[pos] : null; }
   function consume() { return tokens[pos++]; }
 
   function parseExpression() {
-    var left = parseTerm();
+    let left = parseTerm();
     if (!left) return null;
     while (peek() && (peek().type === 'PLUS' || peek().type === 'MINUS')) {
-      var op = consume().type === 'PLUS' ? '+' : '-';
-      var right = parseTerm();
+      const op = consume().type === 'PLUS' ? '+' : '-';
+      const right = parseTerm();
       if (!right) return null;
       left = { type: 'binop', op: op, left: left, right: right };
     }
@@ -1391,11 +1385,11 @@ function parseDiceExpression(input) {
   }
 
   function parseTerm() {
-    var left = parseFactor();
+    let left = parseFactor();
     if (!left) return null;
     while (peek() && (peek().type === 'STAR' || peek().type === 'SLASH')) {
-      var op = consume().type === 'STAR' ? '*' : '/';
-      var right = parseFactor();
+      const op = consume().type === 'STAR' ? '*' : '/';
+      const right = parseFactor();
       if (!right) return null;
       left = { type: 'binop', op: op, left: left, right: right };
     }
@@ -1403,13 +1397,13 @@ function parseDiceExpression(input) {
   }
 
   function parseFactor() {
-    var t = peek();
+    const t = peek();
     if (!t) return null;
 
     // Parenthesized expression
     if (t.type === 'LPAREN') {
       consume();
-      var inner = parseExpression();
+      const inner = parseExpression();
       if (!inner) return null;
       if (!peek() || peek().type !== 'RPAREN') return null;
       consume();
@@ -1419,7 +1413,7 @@ function parseDiceExpression(input) {
     // Bare 'd' (e.g. d20 = 1d20)
     if (t.type === 'D') {
       consume();
-      var sidesT = peek();
+      const sidesT = peek();
       if (!sidesT || sidesT.type !== 'NUMBER') return null;
       consume();
       return { type: 'dice', count: 1, sides: sidesT.value };
@@ -1430,7 +1424,7 @@ function parseDiceExpression(input) {
       consume();
       if (peek() && peek().type === 'D') {
         consume();
-        var sidesT2 = peek();
+        const sidesT2 = peek();
         if (!sidesT2 || sidesT2.type !== 'NUMBER') return null;
         consume();
         return { type: 'dice', count: t.value, sides: sidesT2.value };
@@ -1441,7 +1435,7 @@ function parseDiceExpression(input) {
     return null;
   }
 
-  var ast = parseExpression();
+  const ast = parseExpression();
   if (!ast || pos < tokens.length) {
     return { ast: null, mode: mode, error: 'Invalid expression' };
   }
@@ -1450,28 +1444,28 @@ function parseDiceExpression(input) {
 
 function evalDiceNode(node, mode) {
   if (node.type === 'number') {
-    return { value: node.value, text: String(node.value), hasDice: false };
+    return { value: node.value, text: String(node.value), hasDice: false, rolls: [], modeApplied: false };
   }
 
   if (node.type === 'dice') {
-    var count = node.count;
-    var sides = node.sides;
-    if (count > 1000) return { value: 0, text: 'ERR:too many dice', hasDice: true };
-    if (count === 0) return { value: 0, text: '0', hasDice: true };
+    const count = node.count;
+    const sides = node.sides;
+    if (count > 1000) return { value: 0, text: 'ERR:too many dice', hasDice: true, rolls: [], modeApplied: false };
+    if (count === 0) return { value: 0, text: '0', hasDice: true, rolls: [], modeApplied: false };
 
     // Advantage/disadvantage for exactly 1d20
     if (count === 1 && sides === 20 && mode) {
-      var r1 = Math.floor(Math.random() * 20) + 1;
-      var r2 = Math.floor(Math.random() * 20) + 1;
-      var pick = mode === 'advantage' ? Math.max(r1, r2) : Math.min(r1, r2);
-      return { value: pick, text: '[' + r1 + ', ' + r2 + ']->' + pick, hasDice: true };
+      const r1 = Math.floor(Math.random() * 20) + 1;
+      const r2 = Math.floor(Math.random() * 20) + 1;
+      const pick = mode === 'advantage' ? Math.max(r1, r2) : Math.min(r1, r2);
+      return { value: pick, text: '[' + r1 + ', ' + r2 + ']->' + pick, hasDice: true, rolls: [r1, r2], modeApplied: true };
     }
 
-    var rolls = [];
-    for (var i = 0; i < count; i++) rolls.push(Math.floor(Math.random() * sides) + 1);
-    var sum = rolls.reduce(function(a, b) { return a + b; }, 0);
+    const rolls = [];
+    for (let i = 0; i < count; i++) rolls.push(Math.floor(Math.random() * sides) + 1);
+    const sum = rolls.reduce(function(a, b) { return a + b; }, 0);
 
-    var text;
+    let text;
     if (count === 1) {
       text = String(rolls[0]);
     } else if (count <= 10) {
@@ -1479,53 +1473,57 @@ function evalDiceNode(node, mode) {
     } else {
       text = '(' + sum + ')';
     }
-    return { value: sum, text: text, hasDice: true };
+    return { value: sum, text: text, hasDice: true, rolls: rolls, modeApplied: false };
   }
 
   if (node.type === 'paren') {
-    var inner = evalDiceNode(node.inner, mode);
-    return { value: inner.value, text: '(' + inner.text + ')', hasDice: inner.hasDice };
+    const inner = evalDiceNode(node.inner, mode);
+    return { value: inner.value, text: '(' + inner.text + ')', hasDice: inner.hasDice, rolls: inner.rolls, modeApplied: inner.modeApplied };
   }
 
   if (node.type === 'binop') {
-    var left = evalDiceNode(node.left, mode);
-    var right = evalDiceNode(node.right, mode);
-    var val;
+    const left = evalDiceNode(node.left, mode);
+    const right = evalDiceNode(node.right, mode);
+    let val;
     if (node.op === '+') val = left.value + right.value;
     else if (node.op === '-') val = left.value - right.value;
     else if (node.op === '*') val = left.value * right.value;
     else if (node.op === '/') {
-      if (right.value === 0) return { value: 0, text: 'ERR:div/0', hasDice: true };
+      if (right.value === 0) return { value: 0, text: 'ERR:div/0', hasDice: true, rolls: left.rolls.concat(right.rolls), modeApplied: left.modeApplied || right.modeApplied };
       val = Math.floor(left.value / right.value);
     }
 
+    const combinedRolls = left.rolls.concat(right.rolls);
+    const combinedMode = left.modeApplied || right.modeApplied;
+
     // For * and /: if neither side has dice, collapse to computed value
     if ((node.op === '*' || node.op === '/') && !left.hasDice && !right.hasDice) {
-      return { value: val, text: String(val), hasDice: false };
+      return { value: val, text: String(val), hasDice: false, rolls: combinedRolls, modeApplied: combinedMode };
     }
 
-    var opStr = node.op === '*' ? ' * ' : node.op === '/' ? ' / ' : node.op === '-' ? ' - ' : ' + ';
-    return { value: val, text: left.text + opStr + right.text, hasDice: left.hasDice || right.hasDice };
+    const opStr = node.op === '*' ? ' * ' : node.op === '/' ? ' / ' : node.op === '-' ? ' - ' : ' + ';
+    return { value: val, text: left.text + opStr + right.text, hasDice: left.hasDice || right.hasDice, rolls: combinedRolls, modeApplied: combinedMode };
   }
 
-  return { value: 0, text: 'ERR', hasDice: false };
+  return { value: 0, text: 'ERR', hasDice: false, rolls: [], modeApplied: false };
 }
 
 function rollDiceExpression(input) {
-  var parsed = parseDiceExpression(input);
+  const parsed = parseDiceExpression(input);
   if (parsed.error) return { error: parsed.error, input: input };
 
-  var result = evalDiceNode(parsed.ast, parsed.mode);
-  var total = Math.floor(result.value);
-  var modeLabel = parsed.mode === 'advantage' ? ' (adv)' : parsed.mode === 'disadvantage' ? ' (dis)' : '';
-  var cleanInput = input.trim().replace(/\s+(adv(?:antage)?|dis(?:advantage)?)\s*$/i, '').replace(/\s/g, '');
+  const result = evalDiceNode(parsed.ast, parsed.mode);
+  const total = Math.floor(result.value);
+  const modeLabel = result.modeApplied ? (parsed.mode === 'advantage' ? ' (adv)' : ' (dis)') : '';
+  const cleanInput = input.trim().replace(/\s+(adv(?:antage)?|dis(?:advantage)?)\s*$/i, '').replace(/\s/g, '');
 
   return {
     error: null,
     input: cleanInput + modeLabel,
     mode: parsed.mode,
     breakdown: result.text,
-    total: total
+    total: total,
+    rolls: result.rolls
   };
 }
 
@@ -1597,10 +1595,10 @@ function saveCombat() {
 function ensureArray(val) {
   if (Array.isArray(val)) return val;
   if (val && typeof val === 'object') {
-    var arr = [];
-    for (var k in val) {
+    const arr = [];
+    for (const k in val) {
       if (val.hasOwnProperty(k)) {
-        var idx = parseInt(k);
+        const idx = parseInt(k);
         if (!isNaN(idx)) arr[idx] = val[k];
       }
     }
@@ -1611,9 +1609,9 @@ function ensureArray(val) {
 
 function getTemplate(c) {
   if (c.type !== 'monster') return null;
-  var raw = state.templates.find(t => t.id === c.templateId);
+  const raw = state.templates.find(t => t.id === c.templateId);
   if (!raw) return null;
-  var t = (c.overrides && Object.keys(c.overrides).length > 0) ? deepMerge(raw, c.overrides) : raw;
+  const t = (c.overrides && Object.keys(c.overrides).length > 0) ? deepMerge(raw, c.overrides) : raw;
   // Safety: ensure array fields are arrays (guards against corrupted sparse-object overrides)
   t.savingThrows = ensureArray(t.savingThrows);
   t.skills = ensureArray(t.skills);
@@ -1630,11 +1628,11 @@ function getRawTemplate(c) {
 function deepMerge(base, overrides) {
   if (!overrides || typeof overrides !== 'object') return deepClone(base);
   if (!base || typeof base !== 'object') return deepClone(overrides);
-  var result = {};
-  for (var key in base) {
+  const result = {};
+  for (const key in base) {
     if (!base.hasOwnProperty(key)) continue;
     if (!overrides.hasOwnProperty(key)) { result[key] = deepClone(base[key]); continue; }
-    var bv = base[key], ov = overrides[key];
+    const bv = base[key], ov = overrides[key];
     if (Array.isArray(bv) && Array.isArray(ov)) {
       if (ov.length !== bv.length) {
         // Different length = full replacement (saves/skills add/remove)
@@ -1642,7 +1640,7 @@ function deepMerge(base, overrides) {
       } else {
         // Same length = index-based merge (attacks/features/LAs)
         result[key] = [];
-        for (var i = 0; i < bv.length; i++) {
+        for (let i = 0; i < bv.length; i++) {
           if (ov[i] === null || ov[i] === undefined) {
             result[key][i] = deepClone(bv[i]);
           } else if (typeof ov[i] === 'object' && !Array.isArray(ov[i]) && typeof bv[i] === 'object' && !Array.isArray(bv[i])) {
@@ -1655,8 +1653,8 @@ function deepMerge(base, overrides) {
     } else if (Array.isArray(bv) && !Array.isArray(ov) && typeof ov === 'object' && ov !== null) {
       // Sparse object override against array base (e.g. {"0": {bonus: 21}} vs [{ability:"str",bonus:20}])
       result[key] = [];
-      for (var i = 0; i < bv.length; i++) {
-        var sparseVal = ov[String(i)] !== undefined ? ov[String(i)] : ov[i];
+      for (let i = 0; i < bv.length; i++) {
+        const sparseVal = ov[String(i)] !== undefined ? ov[String(i)] : ov[i];
         if (sparseVal === null || sparseVal === undefined) {
           result[key][i] = deepClone(bv[i]);
         } else if (typeof sparseVal === 'object' && !Array.isArray(sparseVal) && typeof bv[i] === 'object' && !Array.isArray(bv[i])) {
@@ -1671,7 +1669,7 @@ function deepMerge(base, overrides) {
       result[key] = deepClone(ov);
     }
   }
-  for (var key in overrides) {
+  for (const key in overrides) {
     if (overrides.hasOwnProperty(key) && !base.hasOwnProperty(key)) {
       result[key] = deepClone(overrides[key]);
     }
@@ -1681,11 +1679,11 @@ function deepMerge(base, overrides) {
 
 function sparseOverrides(base, edited) {
   if (!base || !edited) return {};
-  var result = {};
-  var hasAny = false;
-  for (var key in edited) {
+  const result = {};
+  let hasAny = false;
+  for (const key in edited) {
     if (!edited.hasOwnProperty(key)) continue;
-    var bv = base[key], ev = edited[key];
+    const bv = base[key], ev = edited[key];
     if (Array.isArray(bv) && Array.isArray(ev)) {
       if (bv.length !== ev.length) {
         // Different length = full replacement
@@ -1693,9 +1691,9 @@ function sparseOverrides(base, edited) {
         hasAny = true;
       } else {
         // Same length = sparse by index
-        var sparse = [];
-        var changed = false;
-        for (var i = 0; i < bv.length; i++) {
+        const sparse = [];
+        let changed = false;
+        for (let i = 0; i < bv.length; i++) {
           if (JSON.stringify(bv[i]) !== JSON.stringify(ev[i])) {
             if (typeof bv[i] === 'object' && !Array.isArray(bv[i]) && bv[i] !== null && typeof ev[i] === 'object' && !Array.isArray(ev[i]) && ev[i] !== null) {
               sparse[i] = sparseOverrides(bv[i], ev[i]);
@@ -1710,7 +1708,7 @@ function sparseOverrides(base, edited) {
         if (changed) { result[key] = sparse; hasAny = true; }
       }
     } else if (typeof bv === 'object' && !Array.isArray(bv) && bv !== null && typeof ev === 'object' && !Array.isArray(ev) && ev !== null) {
-      var sub = sparseOverrides(bv, ev);
+      const sub = sparseOverrides(bv, ev);
       if (Object.keys(sub).length > 0) { result[key] = sub; hasAny = true; }
     } else if (JSON.stringify(bv) !== JSON.stringify(ev)) {
       result[key] = deepClone(ev);
@@ -1722,13 +1720,13 @@ function sparseOverrides(base, edited) {
 
 function isFieldOverridden(c, fieldPath) {
   if (!c.overrides) return false;
-  var parts = fieldPath.split('.');
-  var obj = c.overrides;
-  for (var i = 0; i < parts.length; i++) {
+  const parts = fieldPath.split('.');
+  let obj = c.overrides;
+  for (let i = 0; i < parts.length; i++) {
     if (obj === null || obj === undefined || typeof obj !== 'object') return false;
-    var key = parts[i];
+    const key = parts[i];
     if (Array.isArray(obj)) {
-      var idx = parseInt(key);
+      const idx = parseInt(key);
       if (isNaN(idx) || obj[idx] === null || obj[idx] === undefined) return false;
       obj = obj[idx];
     } else {
@@ -1745,22 +1743,22 @@ function isFieldOverridden(c, fieldPath) {
 
 function switchView(view) {
   // Check for unsaved form changes before switching
-  if (formMode && isFormDirty()) {
+  if (formState.mode && isFormDirty()) {
     if (!confirm('You have unsaved changes. Leave without saving?')) return;
   }
-  formMode = null;
-  formData = null;
-  savedFormSnapshot = null;
+  formState.mode = null;
+  formState.data = null;
+  formState.savedSnapshot = null;
   searchQuery = '';
   // Clear edit mode state
-  editMode = false;
-  editSelected = [];
-  editLockedTemplateId = null;
-  editFormData = null;
-  editFormVisible = false;
-  editRawTemplate = null;
-  editFormSnapshot = null;
-  editConflicts.clear();
+  editState.mode = false;
+  editState.selected = [];
+  editState.lockedTemplateId = null;
+  editState.formData = null;
+  editState.visible = false;
+  editState.rawTemplate = null;
+  editState.formSnapshot = null;
+  editState.conflicts.clear();
 
   currentView = view;
   state.preferences = state.preferences || {};
@@ -1789,13 +1787,13 @@ function handleNew() {
 
 function render() {
   if (currentView === 'templates') {
-    if (formMode === 'template') renderTemplateForm();
+    if (formState.mode === 'template') renderTemplateForm();
     else renderTemplateList();
   } else if (currentView === 'parties') {
-    if (formMode === 'party') renderPartyForm();
+    if (formState.mode === 'party') renderPartyForm();
     else renderPartyList();
   } else if (currentView === 'encounters') {
-    if (formMode === 'encounter') renderEncounterForm();
+    if (formState.mode === 'encounter') renderEncounterForm();
     else renderEncounterList();
   } else if (currentView === 'combat') {
     renderCombatView();
@@ -1856,21 +1854,21 @@ function renderTemplateList() {
 // ═══════════════════════════════════════════════════════════════
 
 function showTemplateForm(id) {
-  formMode = 'template';
+  formState.mode = 'template';
   if (id) {
     const t = state.templates.find(t => t.id === id);
     if (!t) { setStatus('Monster not found.', 'error'); return; }
-    formData = deepClone(t);
+    formState.data = deepClone(t);
   } else {
-    formData = newTemplate();
+    formState.data = newTemplate();
   }
-  savedFormSnapshot = deepClone(formData);
+  formState.savedSnapshot = deepClone(formState.data);
   document.getElementById('btnNew').style.display = 'none';
   renderTemplateForm();
 }
 
 function renderTemplateForm() {
-  const d = formData;
+  const d = formState.data;
   const el = document.getElementById('viewTemplates');
 
   let html = '';
@@ -1878,22 +1876,22 @@ function renderTemplateForm() {
   // ── Basic Info ──
   html += '<div class="form-section"><div class="form-section-title">Basic Info</div>';
   html += '<div class="form-grid cols-4">';
-  html += formField('Name', 'text', d.name, 'formData.name=this.value', 'Goblin');
-  html += formField('Size', 'select', d.size, 'formData.size=this.value', null, SIZES);
-  html += formField('Type', 'text', d.type, 'formData.type=this.value', 'Humanoid');
-  html += formField('Alignment', 'text', d.alignment, 'formData.alignment=this.value', 'Unaligned');
+  html += formField('Name', 'text', d.name, 'formState.data.name=this.value', 'Goblin');
+  html += formField('Size', 'select', d.size, 'formState.data.size=this.value', null, SIZES);
+  html += formField('Type', 'text', d.type, 'formState.data.type=this.value', 'Humanoid');
+  html += formField('Alignment', 'text', d.alignment, 'formState.data.alignment=this.value', 'Unaligned');
   html += '</div>';
   html += '<div class="form-grid cols-4" style="margin-top:0.5rem">';
-  html += formField('AC', 'number', d.ac, 'formData.ac=+this.value');
-  html += formField('AC Note', 'text', d.acNote, 'formData.acNote=this.value', 'natural armor');
-  html += formField('HP Max', 'number', d.hpMax, 'formData.hpMax=+this.value');
-  html += '<div class="form-field"><label>HP Formula</label><div style="display:flex;gap:0.3rem"><input type="text" value="' + esc(d.hpFormula) + '" onchange="formData.hpFormula=this.value" placeholder="2d6" style="flex:1"><button class="btn-sm" onclick="hpFromFormula(\'avg\')" title="Set HP Max to formula average">Avg</button><button class="btn-sm" onclick="hpFromFormula(\'roll\')" title="Roll HP from formula">Roll</button></div></div>';
+  html += formField('AC', 'number', d.ac, 'formState.data.ac=+this.value');
+  html += formField('AC Note', 'text', d.acNote, 'formState.data.acNote=this.value', 'natural armor');
+  html += formField('HP Max', 'number', d.hpMax, 'formState.data.hpMax=+this.value');
+  html += '<div class="form-field"><label>HP Formula</label><div style="display:flex;gap:0.3rem"><input type="text" value="' + esc(d.hpFormula) + '" onchange="formState.data.hpFormula=this.value" placeholder="2d6" style="flex:1"><button class="btn-sm" onclick="hpFromFormula(\'avg\')" title="Set HP Max to formula average">Avg</button><button class="btn-sm" onclick="hpFromFormula(\'roll\')" title="Roll HP from formula">Roll</button></div></div>';
   html += '</div>';
   html += '<div class="form-grid cols-4" style="margin-top:0.5rem">';
-  html += formField('Speed', 'text', d.speed, 'formData.speed=this.value', '30 ft.');
-  html += formField('CR', 'text', d.cr, 'formData.cr=this.value', '1/4');
-  html += formField('Init Bonus', 'number', d.initBonus, 'formData.initBonus=+this.value');
-  html += '<div class="form-field"><label class="checkbox-label"><input type="checkbox" ' + (d.initAdvantage ? 'checked' : '') + ' onchange="formData.initAdvantage=this.checked"> Init Advantage</label></div>';
+  html += formField('Speed', 'text', d.speed, 'formState.data.speed=this.value', '30 ft.');
+  html += formField('CR', 'text', d.cr, 'formState.data.cr=this.value', '1/4');
+  html += formField('Init Bonus', 'number', d.initBonus, 'formState.data.initBonus=+this.value');
+  html += '<div class="form-field"><label class="checkbox-label"><input type="checkbox" ' + (d.initAdvantage ? 'checked' : '') + ' onchange="formState.data.initAdvantage=this.checked"> Init Advantage</label></div>';
   html += '</div></div>';
 
   // ── Ability Scores ──
@@ -1903,7 +1901,7 @@ function renderTemplateForm() {
     const score = d.abilities[ab];
     html += '<div class="form-field"><label>' + ab.toUpperCase() + ' (<span id="mod_' + ab + '">' + modStr(score) + '</span>)</label>';
     const extra = ab === 'wis' ? ';updatePPDisplay()' : '';
-    html += '<input type="number" value="' + score + '" onchange="formData.abilities.' + ab + '=+this.value;document.getElementById(\'mod_' + ab + '\').textContent=modStr(+this.value)' + extra + '">';
+    html += '<input type="number" value="' + score + '" onchange="formState.data.abilities.' + ab + '=+this.value;document.getElementById(\'mod_' + ab + '\').textContent=modStr(+this.value)' + extra + '">';
     html += '</div>';
   });
   html += '</div></div>';
@@ -1912,47 +1910,47 @@ function renderTemplateForm() {
   html += '<div class="form-section"><div class="form-section-title">Saving Throws</div>';
   d.savingThrows.forEach((st, i) => {
     html += '<div class="dyn-row">';
-    html += '<select onchange="formData.savingThrows[' + i + '].ability=this.value" style="width:120px">';
+    html += '<select onchange="formState.data.savingThrows[' + i + '].ability=this.value" style="width:120px">';
     ABILITIES.forEach(ab => {
       html += '<option value="' + ab + '"' + (st.ability === ab ? ' selected' : '') + '>' + ABILITY_NAMES[ab] + '</option>';
     });
     html += '</select>';
-    html += '<input type="number" value="' + st.bonus + '" onchange="formData.savingThrows[' + i + '].bonus=+this.value" style="width:60px" placeholder="+0">';
-    html += '<button class="btn-remove" onclick="formData.savingThrows.splice(' + i + ',1);renderTemplateForm()">×</button>';
+    html += '<input type="number" value="' + st.bonus + '" onchange="formState.data.savingThrows[' + i + '].bonus=+this.value" style="width:60px" placeholder="+0">';
+    html += '<button class="btn-remove" onclick="formState.data.savingThrows.splice(' + i + ',1);renderTemplateForm()">×</button>';
     html += '</div>';
   });
-  html += '<button class="btn-add-row" onclick="formData.savingThrows.push({ability:\'str\',bonus:0});renderTemplateForm()">+ Add Save</button>';
+  html += '<button class="btn-add-row" onclick="formState.data.savingThrows.push({ability:\'str\',bonus:0});renderTemplateForm()">+ Add Save</button>';
   html += '</div>';
 
   // ── Skills ──
   html += '<div class="form-section"><div class="form-section-title">Skills</div>';
   d.skills.forEach((sk, i) => {
     html += '<div class="dyn-row">';
-    html += '<select onchange="formData.skills[' + i + '].name=this.value" style="width:150px">';
+    html += '<select onchange="formState.data.skills[' + i + '].name=this.value" style="width:150px">';
     SKILLS.forEach(s => {
       html += '<option value="' + s + '"' + (sk.name === s ? ' selected' : '') + '>' + s + '</option>';
     });
     html += '</select>';
-    html += '<input type="number" value="' + sk.bonus + '" onchange="formData.skills[' + i + '].bonus=+this.value" style="width:60px" placeholder="+0">';
-    html += '<button class="btn-remove" onclick="formData.skills.splice(' + i + ',1);renderTemplateForm()">×</button>';
+    html += '<input type="number" value="' + sk.bonus + '" onchange="formState.data.skills[' + i + '].bonus=+this.value" style="width:60px" placeholder="+0">';
+    html += '<button class="btn-remove" onclick="formState.data.skills.splice(' + i + ',1);renderTemplateForm()">×</button>';
     html += '</div>';
   });
-  html += '<button class="btn-add-row" onclick="formData.skills.push({name:\'Perception\',bonus:0});renderTemplateForm()">+ Add Skill</button>';
+  html += '<button class="btn-add-row" onclick="formState.data.skills.push({name:\'Perception\',bonus:0});renderTemplateForm()">+ Add Skill</button>';
   html += '</div>';
 
   // ── Defenses ──
   html += '<div class="form-section"><div class="form-section-title">Defenses & Senses</div>';
   html += '<div class="form-grid cols-2">';
-  html += formField('Damage Resistances', 'text', d.damageResistances, 'formData.damageResistances=this.value', 'fire, cold');
-  html += formField('Damage Immunities', 'text', d.damageImmunities, 'formData.damageImmunities=this.value', 'poison');
-  html += formField('Damage Vulnerabilities', 'text', d.damageVulnerabilities, 'formData.damageVulnerabilities=this.value', 'radiant');
-  html += formField('Condition Immunities', 'text', d.conditionImmunities, 'formData.conditionImmunities=this.value', 'frightened');
-  html += formField('Senses', 'text', d.senses, 'formData.senses=this.value', 'darkvision 60 ft.');
-  html += formField('Languages', 'text', d.languages, 'formData.languages=this.value', 'Common, Goblin');
+  html += formField('Damage Resistances', 'text', d.damageResistances, 'formState.data.damageResistances=this.value', 'fire, cold');
+  html += formField('Damage Immunities', 'text', d.damageImmunities, 'formState.data.damageImmunities=this.value', 'poison');
+  html += formField('Damage Vulnerabilities', 'text', d.damageVulnerabilities, 'formState.data.damageVulnerabilities=this.value', 'radiant');
+  html += formField('Condition Immunities', 'text', d.conditionImmunities, 'formState.data.conditionImmunities=this.value', 'frightened');
+  html += formField('Senses', 'text', d.senses, 'formState.data.senses=this.value', 'darkvision 60 ft.');
+  html += formField('Languages', 'text', d.languages, 'formState.data.languages=this.value', 'Common, Goblin');
   html += '</div>';
   html += '<div class="form-grid cols-2" style="margin-top:0.5rem">';
   html += '<div class="form-field"><label>Passive Perception (auto: <span id="pp_auto">' + calcPassivePerception(d) + '</span>)</label>';
-  html += '<input type="number" id="pp_input" value="' + (d.passivePerception != null ? d.passivePerception : '') + '" onchange="formData.passivePerception=this.value===\'\'?null:+this.value;updatePPDisplay()" placeholder="' + calcPassivePerception(d) + '">';
+  html += '<input type="number" id="pp_input" value="' + (d.passivePerception != null ? d.passivePerception : '') + '" onchange="formState.data.passivePerception=this.value===\'\'?null:+this.value;updatePPDisplay()" placeholder="' + calcPassivePerception(d) + '">';
   html += '</div>';
   html += '<div class="form-field"></div>';
   html += '</div></div>';
@@ -1960,8 +1958,8 @@ function renderTemplateForm() {
   // ── Attacks ──
   html += '<div class="form-section"><div class="form-section-title">Attacks</div>';
   html += '<div class="form-grid cols-2">';
-  html += formField('Multiattack', 'text', d.multiattack, 'formData.multiattack=this.value', 'Two claw attacks');
-  html += formField('Crits On', 'number', d.critRange || 20, 'formData.critRange=+this.value||20', '20');
+  html += formField('Multiattack', 'text', d.multiattack, 'formState.data.multiattack=this.value', 'Two claw attacks');
+  html += formField('Crits On', 'number', d.critRange || 20, 'formState.data.critRange=+this.value||20', '20');
   html += '</div>';
   html += '<div style="margin-top:0.5rem">';
   d.attacks.forEach((a, i) => {
@@ -1976,10 +1974,10 @@ function renderTemplateForm() {
       html += '</div>';
     }
     html += '<div class="dyn-row" style="margin-bottom:0.3rem">';
-    html += '<input type="text" value="' + esc(a.name) + '" onchange="formData.attacks[' + i + '].name=this.value" placeholder="Scimitar" style="flex:2">';
-    html += '<input type="number" value="' + a.bonus + '" onchange="formData.attacks[' + i + '].bonus=+this.value" placeholder="+4" style="width:55px">';
-    html += '<input type="text" value="' + esc(a.note || '') + '" onchange="formData.attacks[' + i + '].note=this.value" placeholder="reach 10ft" style="flex:1">';
-    html += '<button class="btn-remove" onclick="formData.attacks.splice(' + i + ',1);renderTemplateForm()">×</button>';
+    html += '<input type="text" value="' + esc(a.name) + '" onchange="formState.data.attacks[' + i + '].name=this.value" placeholder="Scimitar" style="flex:2">';
+    html += '<input type="number" value="' + a.bonus + '" onchange="formState.data.attacks[' + i + '].bonus=+this.value" placeholder="+4" style="width:55px">';
+    html += '<input type="text" value="' + esc(a.note || '') + '" onchange="formState.data.attacks[' + i + '].note=this.value" placeholder="reach 10ft" style="flex:1">';
+    html += '<button class="btn-remove" onclick="formState.data.attacks.splice(' + i + ',1);renderTemplateForm()">×</button>';
     html += '</div>';
     // Damage rows
     if (a.damages && a.damages.length > 0) {
@@ -1992,19 +1990,19 @@ function renderTemplateForm() {
       html += '</div>';
       a.damages.forEach((dm, j) => {
         html += '<div class="dyn-row">';
-        html += '<input type="text" value="' + esc(dm.dice) + '" onchange="formData.attacks[' + i + '].damages[' + j + '].dice=this.value" placeholder="1d8+2" style="width:80px" title="Damage dice">';
-        html += '<input type="text" value="' + esc(dm.type) + '" onchange="formData.attacks[' + i + '].damages[' + j + '].type=this.value" placeholder="slashing" style="width:80px" title="Damage type">';
-        html += '<input type="text" value="' + esc(dm.note || '') + '" onchange="formData.attacks[' + i + '].damages[' + j + '].note=this.value" placeholder="note" style="flex:1" title="Damage note">';
-        html += '<button class="btn-remove" onclick="formData.attacks[' + i + '].damages.splice(' + j + ',1);renderTemplateForm()">×</button>';
+        html += '<input type="text" value="' + esc(dm.dice) + '" onchange="formState.data.attacks[' + i + '].damages[' + j + '].dice=this.value" placeholder="1d8+2" style="width:80px" title="Damage dice">';
+        html += '<input type="text" value="' + esc(dm.type) + '" onchange="formState.data.attacks[' + i + '].damages[' + j + '].type=this.value" placeholder="slashing" style="width:80px" title="Damage type">';
+        html += '<input type="text" value="' + esc(dm.note || '') + '" onchange="formState.data.attacks[' + i + '].damages[' + j + '].note=this.value" placeholder="note" style="flex:1" title="Damage note">';
+        html += '<button class="btn-remove" onclick="formState.data.attacks[' + i + '].damages.splice(' + j + ',1);renderTemplateForm()">×</button>';
         html += '</div>';
       });
       html += '</div>';
     }
-    html += '<button class="btn-add-row btn-sm" onclick="formData.attacks[' + i + '].damages.push({dice:\'\',type:\'\',note:\'\'});renderTemplateForm()" style="margin-left:0.75rem">+ Damage</button>';
+    html += '<button class="btn-add-row btn-sm" onclick="formState.data.attacks[' + i + '].damages.push({dice:\'\',type:\'\',note:\'\'});renderTemplateForm()" style="margin-left:0.75rem">+ Damage</button>';
     html += '</div>';
   });
   html += '</div>';
-  html += '<button class="btn-add-row" onclick="formData.attacks.push({name:\'\',bonus:0,note:\'\',damages:[{dice:\'\',type:\'\',note:\'\'}]});renderTemplateForm()">+ Add Attack</button>';
+  html += '<button class="btn-add-row" onclick="formState.data.attacks.push({name:\'\',bonus:0,note:\'\',damages:[{dice:\'\',type:\'\',note:\'\'}]});renderTemplateForm()">+ Add Attack</button>';
   html += '</div>';
 
   // ── Features ──
@@ -2020,22 +2018,22 @@ function renderTemplateForm() {
   d.features.forEach((f, i) => {
     html += '<div class="dyn-row" style="flex-direction:column">';
     html += '<div style="display:flex;gap:0.4rem;width:100%">';
-    html += '<input type="text" value="' + esc(f.name) + '" onchange="formData.features[' + i + '].name=this.value" placeholder="Feature name" style="flex:2">';
-    html += '<input type="text" value="' + esc(f.recharge || '') + '" onchange="formData.features[' + i + '].recharge=this.value||null" placeholder="5-6" style="width:100px">';
-    html += '<input type="number" value="' + (f.usesMax || '') + '" onchange="formData.features[' + i + '].usesMax=+this.value||null;formData.features[' + i + '].uses=+this.value||null" placeholder="#" style="width:55px">';
-    html += '<button class="btn-remove" onclick="formData.features.splice(' + i + ',1);renderTemplateForm()">×</button>';
+    html += '<input type="text" value="' + esc(f.name) + '" onchange="formState.data.features[' + i + '].name=this.value" placeholder="Feature name" style="flex:2">';
+    html += '<input type="text" value="' + esc(f.recharge || '') + '" onchange="formState.data.features[' + i + '].recharge=this.value||null" placeholder="5-6" style="width:100px">';
+    html += '<input type="number" value="' + (f.usesMax || '') + '" onchange="formState.data.features[' + i + '].usesMax=+this.value||null;formState.data.features[' + i + '].uses=+this.value||null" placeholder="#" style="width:55px">';
+    html += '<button class="btn-remove" onclick="formState.data.features.splice(' + i + ',1);renderTemplateForm()">×</button>';
     html += '</div>';
-    html += '<textarea onchange="formData.features[' + i + '].desc=this.value" placeholder="Description..." style="width:100%">' + esc(f.desc) + '</textarea>';
+    html += '<textarea onchange="formState.data.features[' + i + '].desc=this.value" placeholder="Description..." style="width:100%">' + esc(f.desc) + '</textarea>';
     html += '</div>';
   });
-  html += '<button class="btn-add-row" onclick="formData.features.push({name:\'\',desc:\'\',recharge:null,uses:null,usesMax:null});renderTemplateForm()">+ Add Feature</button>';
+  html += '<button class="btn-add-row" onclick="formState.data.features.push({name:\'\',desc:\'\',recharge:null,uses:null,usesMax:null});renderTemplateForm()">+ Add Feature</button>';
   html += '</div>';
 
   // ── Legendary ──
   html += '<div class="form-section"><div class="form-section-title">Legendary</div>';
   html += '<div class="form-grid cols-2">';
-  html += formField('Actions/Round', 'number', d.legendaryActionBudget, 'formData.legendaryActionBudget=+this.value');
-  html += formField('Resistances', 'number', d.legendaryResistances, 'formData.legendaryResistances=+this.value');
+  html += formField('Actions/Round', 'number', d.legendaryActionBudget, 'formState.data.legendaryActionBudget=+this.value');
+  html += formField('Resistances', 'number', d.legendaryResistances, 'formState.data.legendaryResistances=+this.value');
   html += '</div>';
   if (d.legendaryActionBudget > 0 || d.legendaryActions.length > 0) {
     html += '<div style="margin-top:0.5rem">';
@@ -2049,30 +2047,30 @@ function renderTemplateForm() {
     d.legendaryActions.forEach((la, i) => {
       html += '<div class="dyn-row" style="flex-direction:column">';
       html += '<div style="display:flex;gap:0.4rem;width:100%">';
-      html += '<input type="text" value="' + esc(la.name) + '" onchange="formData.legendaryActions[' + i + '].name=this.value" placeholder="Action name" style="flex:2">';
-      html += '<input type="number" value="' + la.cost + '" onchange="formData.legendaryActions[' + i + '].cost=+this.value" placeholder="#" style="width:55px">';
-      html += '<button class="btn-remove" onclick="formData.legendaryActions.splice(' + i + ',1);renderTemplateForm()">×</button>';
+      html += '<input type="text" value="' + esc(la.name) + '" onchange="formState.data.legendaryActions[' + i + '].name=this.value" placeholder="Action name" style="flex:2">';
+      html += '<input type="number" value="' + la.cost + '" onchange="formState.data.legendaryActions[' + i + '].cost=+this.value" placeholder="#" style="width:55px">';
+      html += '<button class="btn-remove" onclick="formState.data.legendaryActions.splice(' + i + ',1);renderTemplateForm()">×</button>';
       html += '</div>';
-      html += '<textarea onchange="formData.legendaryActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%">' + esc(la.desc) + '</textarea>';
+      html += '<textarea onchange="formState.data.legendaryActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%">' + esc(la.desc) + '</textarea>';
       html += '</div>';
     });
-    html += '<button class="btn-add-row" onclick="formData.legendaryActions.push({name:\'\',cost:1,desc:\'\'});renderTemplateForm()">+ Add Legendary Action</button>';
+    html += '<button class="btn-add-row" onclick="formState.data.legendaryActions.push({name:\'\',cost:1,desc:\'\'});renderTemplateForm()">+ Add Legendary Action</button>';
     html += '</div>';
   }
   html += '</div>';
 
   // ── Tactics ──
   html += '<div class="form-section"><div class="form-section-title">Tactics & Notes</div>';
-  html += '<div class="form-field"><textarea rows="3" onchange="formData.tactics=this.value" placeholder="How this monster fights: target priority, positioning, retreat conditions...">' + esc(d.tactics) + '</textarea>';
+  html += '<div class="form-field"><textarea rows="3" onchange="formState.data.tactics=this.value" placeholder="How this monster fights: target priority, positioning, retreat conditions...">' + esc(d.tactics) + '</textarea>';
   html += '</div></div>';
 
   // ── Descriptions ──
   html += '<div class="form-section"><div class="form-section-title">Descriptions</div>';
   html += '<div class="form-field"><label>Player Description</label>';
-  html += '<textarea rows="3" onchange="formData.playerDescription=this.value" placeholder="What players see: appearance, sounds, smells - read aloud or reference when asked...">' + esc(d.playerDescription || '') + '</textarea>';
+  html += '<textarea rows="3" onchange="formState.data.playerDescription=this.value" placeholder="What players see: appearance, sounds, smells - read aloud or reference when asked...">' + esc(d.playerDescription || '') + '</textarea>';
   html += '</div>';
   html += '<div class="form-field"><label>DM Description</label>';
-  html += '<textarea rows="3" onchange="formData.dmDescription=this.value" placeholder="Lore, behavior, SRD reference text, background info...">' + esc(d.dmDescription || '') + '</textarea>';
+  html += '<textarea rows="3" onchange="formState.data.dmDescription=this.value" placeholder="Lore, behavior, SRD reference text, background info...">' + esc(d.dmDescription || '') + '</textarea>';
   html += '</div></div>';
 
   // ── Form Actions ──
@@ -2104,7 +2102,7 @@ function formField(label, type, value, onchange, placeholder, options) {
 }
 
 function hpFromFormula(mode) {
-  const formula = formData.hpFormula.trim();
+  const formula = formState.data.hpFormula.trim();
   if (!formula) { setStatus('Enter an HP formula first.', 'warning'); return; }
   const match = formula.match(/^(\d+)d(\d+)\s*([+-]\s*\d+)?$/i);
   if (!match) { setStatus('Invalid formula: ' + formula, 'error'); return; }
@@ -2114,40 +2112,40 @@ function hpFromFormula(mode) {
 
   if (mode === 'avg') {
     const avg = Math.floor(count * (sides + 1) / 2) + modifier;
-    formData.hpMax = Math.max(1, avg);
-    setStatus('HP set to average: ' + formData.hpMax, 'success');
+    formState.data.hpMax = Math.max(1, avg);
+    setStatus('HP set to average: ' + formState.data.hpMax, 'success');
   } else {
     const result = rollDice(formula);
-    formData.hpMax = Math.max(1, result.total);
+    formState.data.hpMax = Math.max(1, result.total);
     setStatus('HP rolled: ' + result.text, 'success');
   }
   renderTemplateForm();
 }
 
 function saveTemplate() {
-  if (!formData.name.trim()) {
+  if (!formState.data.name.trim()) {
     setStatus('Monster name is required.', 'error');
     return;
   }
-  const idx = state.templates.findIndex(t => t.id === formData.id);
+  const idx = state.templates.findIndex(t => t.id === formState.data.id);
   if (idx >= 0) {
-    state.templates[idx] = deepClone(formData);
-    setStatus('Monster saved: ' + formData.name, 'success');
+    state.templates[idx] = deepClone(formState.data);
+    setStatus('Monster saved: ' + formState.data.name, 'success');
   } else {
-    state.templates.push(deepClone(formData));
-    setStatus('Monster saved: ' + formData.name, 'success');
+    state.templates.push(deepClone(formState.data));
+    setStatus('Monster saved: ' + formState.data.name, 'success');
   }
   save('templates');
-  savedFormSnapshot = deepClone(formData);
+  formState.savedSnapshot = deepClone(formState.data);
 }
 
 function closeTemplateForm() {
   if (isFormDirty()) {
     if (!confirm('You have unsaved changes. Close without saving?')) return;
   }
-  formMode = null;
-  formData = null;
-  savedFormSnapshot = null;
+  formState.mode = null;
+  formState.data = null;
+  formState.savedSnapshot = null;
   setStatus('', '');
   render();
 }
@@ -2156,9 +2154,9 @@ function cancelTemplateForm() {
   if (isFormDirty()) {
     if (!confirm('Discard all changes?')) return;
   }
-  formMode = null;
-  formData = null;
-  savedFormSnapshot = null;
+  formState.mode = null;
+  formState.data = null;
+  formState.savedSnapshot = null;
   setStatus('', '');
   render();
 }
@@ -2223,21 +2221,21 @@ function renderEncounterList() {
 // ═══════════════════════════════════════════════════════════════
 
 function showEncounterForm(id) {
-  formMode = 'encounter';
+  formState.mode = 'encounter';
   if (id) {
     const e = state.encounters.find(e => e.id === id);
     if (!e) { setStatus('Encounter not found.', 'error'); return; }
-    formData = deepClone(e);
+    formState.data = deepClone(e);
   } else {
-    formData = newEncounter();
+    formState.data = newEncounter();
   }
-  savedFormSnapshot = deepClone(formData);
+  formState.savedSnapshot = deepClone(formState.data);
   document.getElementById('btnNew').style.display = 'none';
   renderEncounterForm();
 }
 
 function renderEncounterForm() {
-  const d = formData;
+  const d = formState.data;
   const el = document.getElementById('viewEncounters');
 
   let html = '';
@@ -2245,13 +2243,13 @@ function renderEncounterForm() {
   // ── Details ──
   html += '<div class="form-section"><div class="form-section-title">Encounter Details</div>';
   html += '<div class="form-grid cols-3">';
-  html += formField('Name *', 'text', d.name, 'formData.name=this.value', 'Ambush at Cragmaw');
-  html += formField('Campaign', 'text', d.campaign, 'formData.campaign=this.value', 'Lost Mines');
-  html += formField('Location', 'text', d.location, 'formData.location=this.value', 'Forest Road');
+  html += formField('Name *', 'text', d.name, 'formState.data.name=this.value', 'Ambush at Cragmaw');
+  html += formField('Campaign', 'text', d.campaign, 'formState.data.campaign=this.value', 'Lost Mines');
+  html += formField('Location', 'text', d.location, 'formState.data.location=this.value', 'Forest Road');
   html += '</div>';
   html += '<div style="margin-top:0.5rem">';
   html += '<div class="form-field"><label>Notes</label>';
-  html += '<textarea onchange="formData.notes=this.value" placeholder="Encounter notes...">' + esc(d.notes) + '</textarea>';
+  html += '<textarea onchange="formState.data.notes=this.value" placeholder="Encounter notes...">' + esc(d.notes) + '</textarea>';
   html += '</div></div></div>';
 
   // ── Monsters ──
@@ -2272,8 +2270,8 @@ function renderEncounterForm() {
     const t = state.templates.find(t => t.id === m.templateId);
     html += '<div class="monster-pick">';
     html += '<span class="pick-name">' + esc(t ? t.name : '(deleted template)') + '</span>';
-    html += '<input type="number" class="pick-qty" value="' + m.qty + '" min="1" max="20" onchange="formData.monsters[' + i + '].qty=+this.value">';
-    html += '<button class="btn-sm btn-remove" onclick="formData.monsters.splice(' + i + ',1);renderEncounterForm()">×</button>';
+    html += '<input type="number" class="pick-qty" value="' + m.qty + '" min="1" max="20" onchange="formState.data.monsters[' + i + '].qty=+this.value">';
+    html += '<button class="btn-sm btn-remove" onclick="formState.data.monsters.splice(' + i + ',1);renderEncounterForm()">×</button>';
     html += '</div>';
   });
   html += '</div>';
@@ -2298,11 +2296,11 @@ function addMonsterToEncounter() {
   const qty = Math.max(1, parseInt(qtyInput.value) || 1);
 
   // Check if already added - increment qty instead
-  const existing = formData.monsters.find(m => m.templateId === templateId);
+  const existing = formState.data.monsters.find(m => m.templateId === templateId);
   if (existing) {
     existing.qty += qty;
   } else {
-    formData.monsters.push({ templateId, qty });
+    formState.data.monsters.push({ templateId, qty });
   }
   input.value = '';
   input.dataset.templateId = '';
@@ -2340,29 +2338,29 @@ document.addEventListener('click', function(e) {
 });
 
 function saveEncounter() {
-  if (!formData.name.trim()) {
+  if (!formState.data.name.trim()) {
     setStatus('Encounter name is required.', 'error');
     return;
   }
-  const idx = state.encounters.findIndex(e => e.id === formData.id);
+  const idx = state.encounters.findIndex(e => e.id === formState.data.id);
   if (idx >= 0) {
-    state.encounters[idx] = deepClone(formData);
-    setStatus('Encounter saved: ' + formData.name, 'success');
+    state.encounters[idx] = deepClone(formState.data);
+    setStatus('Encounter saved: ' + formState.data.name, 'success');
   } else {
-    state.encounters.push(deepClone(formData));
-    setStatus('Encounter saved: ' + formData.name, 'success');
+    state.encounters.push(deepClone(formState.data));
+    setStatus('Encounter saved: ' + formState.data.name, 'success');
   }
   save('encounters');
-  savedFormSnapshot = deepClone(formData);
+  formState.savedSnapshot = deepClone(formState.data);
 }
 
 function closeEncounterForm() {
   if (isFormDirty()) {
     if (!confirm('You have unsaved changes. Close without saving?')) return;
   }
-  formMode = null;
-  formData = null;
-  savedFormSnapshot = null;
+  formState.mode = null;
+  formState.data = null;
+  formState.savedSnapshot = null;
   setStatus('', '');
   render();
 }
@@ -2371,9 +2369,9 @@ function cancelEncounterForm() {
   if (isFormDirty()) {
     if (!confirm('Discard all changes?')) return;
   }
-  formMode = null;
-  formData = null;
-  savedFormSnapshot = null;
+  formState.mode = null;
+  formState.data = null;
+  formState.savedSnapshot = null;
   setStatus('', '');
   render();
 }
@@ -2431,28 +2429,28 @@ function renderPartyList() {
 // ═══════════════════════════════════════════════════════════════
 
 function showPartyForm(id) {
-  formMode = 'party';
+  formState.mode = 'party';
   if (id) {
     const p = state.parties.find(p => p.id === id);
     if (!p) { setStatus('Party not found.', 'error'); return; }
-    formData = deepClone(p);
+    formState.data = deepClone(p);
   } else {
-    formData = newParty();
+    formState.data = newParty();
   }
-  savedFormSnapshot = deepClone(formData);
+  formState.savedSnapshot = deepClone(formState.data);
   document.getElementById('btnNew').style.display = 'none';
   renderPartyForm();
 }
 
 function renderPartyForm() {
-  const d = formData;
+  const d = formState.data;
   const el = document.getElementById('viewParties');
 
   let html = '';
 
   html += '<div class="form-section"><div class="form-section-title">Party Details</div>';
   html += '<div class="form-grid cols-2">';
-  html += formField('Party Name *', 'text', d.name, 'formData.name=this.value', 'Tuesday Night Crew');
+  html += formField('Party Name *', 'text', d.name, 'formState.data.name=this.value', 'Tuesday Night Crew');
   html += '<div class="form-field"></div>';
   html += '</div></div>';
 
@@ -2491,39 +2489,39 @@ function addPlayerToParty() {
   if (!input) return;
   const name = input.value.trim();
   if (!name) return;
-  if (!formData.players.includes(name)) formData.players.push(name);
+  if (!formState.data.players.includes(name)) formState.data.players.push(name);
   renderPartyForm();
 }
 
 function removePlayerFromParty(idx) {
-  formData.players.splice(idx, 1);
+  formState.data.players.splice(idx, 1);
   renderPartyForm();
 }
 
 function saveParty() {
-  if (!formData.name.trim()) {
+  if (!formState.data.name.trim()) {
     setStatus('Party name is required.', 'error');
     return;
   }
-  const idx = state.parties.findIndex(p => p.id === formData.id);
+  const idx = state.parties.findIndex(p => p.id === formState.data.id);
   if (idx >= 0) {
-    state.parties[idx] = deepClone(formData);
-    setStatus('Party saved: ' + formData.name, 'success');
+    state.parties[idx] = deepClone(formState.data);
+    setStatus('Party saved: ' + formState.data.name, 'success');
   } else {
-    state.parties.push(deepClone(formData));
-    setStatus('Party saved: ' + formData.name, 'success');
+    state.parties.push(deepClone(formState.data));
+    setStatus('Party saved: ' + formState.data.name, 'success');
   }
   save('parties');
-  savedFormSnapshot = deepClone(formData);
+  formState.savedSnapshot = deepClone(formState.data);
 }
 
 function closePartyForm() {
   if (isFormDirty()) {
     if (!confirm('You have unsaved changes. Close without saving?')) return;
   }
-  formMode = null;
-  formData = null;
-  savedFormSnapshot = null;
+  formState.mode = null;
+  formState.data = null;
+  formState.savedSnapshot = null;
   setStatus('', '');
   render();
 }
@@ -2532,9 +2530,9 @@ function cancelPartyForm() {
   if (isFormDirty()) {
     if (!confirm('Discard all changes?')) return;
   }
-  formMode = null;
-  formData = null;
-  savedFormSnapshot = null;
+  formState.mode = null;
+  formState.data = null;
+  formState.savedSnapshot = null;
   setStatus('', '');
   render();
 }
@@ -2747,7 +2745,7 @@ function renderInitiativeSetup(el) {
 
   let html = '<div class="form-section">';
   html += '<div class="form-section-title">Initiative Setup' + (enc ? ': ' + esc(enc.name) : '') + '</div>';
-  html += '<p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.75rem">Enter player initiatives. Monster initiatives are pre-rolled but editable.</p>';
+  html += '<p class="text-muted-sm" style="margin-bottom:0.75rem">Enter player initiatives. Monster initiatives are pre-rolled but editable.</p>';
 
   // Sort for display: monsters first (already have init), then players
   const sorted = [...combat.combatants].sort((a, b) => {
@@ -2782,7 +2780,9 @@ function renderInitiativeSetup(el) {
 }
 
 function setCombatantInit(idx, value) {
-  getActiveCombat().combatants[idx].init = value === '' ? null : +value;
+  const c = getCombatant(idx);
+  if (!c) return;
+  c.init = value === '' ? null : +value;
   saveCombat();
 }
 
@@ -2813,25 +2813,18 @@ function selectCombatMonster(templateId) {
 }
 
 function showAddCombatantModal() {
-  const existing = document.getElementById('addCombatantModal');
-  if (existing) existing.remove();
   const combat = getActiveCombat();
   const isActive = combat.round >= 1;
   const defaultInit = isActive ? '20' : '';
 
-  const modal = document.createElement('div');
-  modal.id = 'addCombatantModal';
-  modal.className = 'modal-overlay';
-  modal.innerHTML = '<div class="modal-content modal-wide">' +
-    '<div class="form-section-title" style="margin-bottom:0.75rem">Add Combatant</div>' +
+  const bodyHtml =
     '<div class="modal-toggle-group">' +
     '<button id="addModeAdhoc" class="active" onclick="switchAddMode(\'adhoc\')">Ad-hoc</button>' +
     '<button id="addModePlayer" onclick="switchAddMode(\'player\')">Player</button>' +
     '<button id="addModeTemplate" onclick="switchAddMode(\'template\')">Monster</button>' +
     '</div>' +
     '<div id="addCombatantBody">' +
-    // Ad-hoc mode (default)
-    '<div style="display:flex;flex-direction:column;gap:0.5rem">' +
+    '<div class="flex-col">' +
     '<label style="font-size:0.75rem;color:var(--text-muted)">Name</label>' +
     '<input type="text" id="addCombatantName" placeholder="Lair Actions, Doors, Siege Engines..." onclick="event.stopPropagation()" style="padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem">' +
     '<div style="display:flex;gap:0.75rem;align-items:flex-end">' +
@@ -2844,31 +2837,30 @@ function showAddCombatantModal() {
     '</div>' +
     '</div>' +
     '</div>' +
-    '<div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:1rem">' +
+    '<div class="flex-row-end" style="margin-top:1rem">' +
     '<button class="btn-sm" onclick="document.getElementById(\'addCombatantModal\').remove()">Cancel</button>' +
     '<button class="btn-sm btn-action" onclick="doAddCombatant()">Add</button>' +
-    '</div></div>';
-  document.body.appendChild(modal);
-  setTimeout(function() { var el = document.getElementById('addCombatantName'); if (el) el.focus(); }, 50);
+    '</div>';
+  createModal('addCombatantModal', 'Add Combatant', bodyHtml, { wide: true, focusId: 'addCombatantName' });
 }
 
 function switchAddMode(mode) {
-  var btns = ['addModeAdhoc', 'addModePlayer', 'addModeTemplate'];
+  const btns = ['addModeAdhoc', 'addModePlayer', 'addModeTemplate'];
   btns.forEach(function(id) {
-    var el = document.getElementById(id);
+    const el = document.getElementById(id);
     if (el) el.className = (id === 'addMode' + mode.charAt(0).toUpperCase() + mode.slice(1)) ? 'active' : '';
   });
-  var body = document.getElementById('addCombatantBody');
+  const body = document.getElementById('addCombatantBody');
   if (!body) return;
-  var combat = getActiveCombat();
-  var isActive = combat.round >= 1;
-  var defaultInit = isActive ? '20' : '';
-  var inputStyle = 'padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem';
-  var monoStyle = inputStyle + ';font-family:var(--mono)';
+  const combat = getActiveCombat();
+  const isActive = combat.round >= 1;
+  const defaultInit = isActive ? '20' : '';
+  const inputStyle = 'padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.8rem';
+  const monoStyle = inputStyle + ';font-family:var(--mono)';
 
   if (mode === 'adhoc') {
     body.innerHTML =
-      '<div style="display:flex;flex-direction:column;gap:0.5rem">' +
+      '<div class="flex-col">' +
       '<label style="font-size:0.75rem;color:var(--text-muted)">Name</label>' +
       '<input type="text" id="addCombatantName" placeholder="Lair Actions, Doors, Siege Engines..." onclick="event.stopPropagation()" style="' + inputStyle + '">' +
       '<div style="display:flex;gap:0.75rem;align-items:flex-end">' +
@@ -2880,10 +2872,10 @@ function switchAddMode(mode) {
       '<input type="number" id="addCombatantAdhocAC" placeholder="-" onclick="event.stopPropagation()" style="width:60px;' + monoStyle + ';display:block"></div>' +
       '</div>' +
       '</div>';
-    setTimeout(function() { var el = document.getElementById('addCombatantName'); if (el) el.focus(); }, 50);
+    setTimeout(function() { const el = document.getElementById('addCombatantName'); if (el) el.focus(); }, 50);
   } else if (mode === 'player') {
     body.innerHTML =
-      '<div style="display:flex;flex-direction:column;gap:0.5rem">' +
+      '<div class="flex-col">' +
       '<label style="font-size:0.75rem;color:var(--text-muted)">Player Name</label>' +
       '<input type="text" id="addCombatantName" placeholder="Player name..." onclick="event.stopPropagation()" style="' + inputStyle + '">' +
       '<div style="display:flex;gap:0.75rem;align-items:flex-end">' +
@@ -2895,10 +2887,10 @@ function switchAddMode(mode) {
       '<label style="font-size:0.75rem;color:var(--text-muted)">Notes</label>' +
       '<input type="text" id="addCombatantNotes" placeholder="Optional notes..." onclick="event.stopPropagation()" style="' + inputStyle + '">' +
       '</div>';
-    setTimeout(function() { var el = document.getElementById('addCombatantName'); if (el) el.focus(); }, 50);
+    setTimeout(function() { const el = document.getElementById('addCombatantName'); if (el) el.focus(); }, 50);
   } else {
     body.innerHTML =
-      '<div style="display:flex;flex-direction:column;gap:0.5rem">' +
+      '<div class="flex-col">' +
       '<label style="font-size:0.75rem;color:var(--text-muted)">Monster</label>' +
       '<div class="search-select">' +
       '<input type="text" id="combatMonsterPicker" placeholder="Search monsters..." autocomplete="off"' +
@@ -2914,7 +2906,7 @@ function switchAddMode(mode) {
       '<input type="number" id="addCombatantInit" step="0.01" placeholder="Auto" onclick="event.stopPropagation()" style="width:80px;' + monoStyle + ';display:block"></div>' +
       '</div>' +
       '</div>';
-    setTimeout(function() { var el = document.getElementById('combatMonsterPicker'); if (el) el.focus(); }, 50);
+    setTimeout(function() { const el = document.getElementById('combatMonsterPicker'); if (el) el.focus(); }, 50);
   }
 }
 
@@ -2988,7 +2980,7 @@ function doAddCombatant() {
     const hp = hpEl && hpEl.value !== '' ? Math.max(1, parseInt(hpEl.value) || 0) : null;
     const acEl = document.getElementById('addCombatantAdhocAC');
     const acVal = acEl && acEl.value !== '' ? parseInt(acEl.value) || 0 : null;
-    var entry = {
+    const entry = {
       id: uuid(),
       name: name,
       type: 'adhoc',
@@ -3026,7 +3018,7 @@ function beginCombat() {
   combat.turnIndex = 0;
   combat.combatants.forEach(c => { c.reactionUsed = false; });
   // Auto-expand the first combatant
-  var first = combat.combatants[0];
+  const first = combat.combatants[0];
   if (first && !first._expanded) {
     first._expanded = true;
     autoExpandedId = first.id;
@@ -3041,91 +3033,91 @@ function beginCombat() {
 // ═══════════════════════════════════════════════════════════════
 
 function exitEditMode() {
-  editMode = false;
-  editSelected = [];
-  editLockedTemplateId = null;
-  editFormData = null;
-  editFormVisible = false;
-  editRawTemplate = null;
-  editFormSnapshot = null;
-  editConflicts.clear();
+  editState.mode = false;
+  editState.selected = [];
+  editState.lockedTemplateId = null;
+  editState.formData = null;
+  editState.visible = false;
+  editState.rawTemplate = null;
+  editState.formSnapshot = null;
+  editState.conflicts.clear();
   render();
 }
 
 function toggleEditMode() {
-  if (editMode) {
+  if (editState.mode) {
     exitEditMode();
   } else {
-    editMode = true;
-    editSelected = [];
-    editLockedTemplateId = null;
-    editFormData = null;
-    editFormVisible = false;
-    editRawTemplate = null;
-    editFormSnapshot = null;
-    editConflicts.clear();
+    editState.mode = true;
+    editState.selected = [];
+    editState.lockedTemplateId = null;
+    editState.formData = null;
+    editState.visible = false;
+    editState.rawTemplate = null;
+    editState.formSnapshot = null;
+    editState.conflicts.clear();
     render();
   }
 }
 
 function toggleEditSelect(combatantId, templateId) {
-  var idx = editSelected.indexOf(combatantId);
+  const idx = editState.selected.indexOf(combatantId);
   if (idx >= 0) {
-    editSelected.splice(idx, 1);
-    if (editSelected.length === 0) editLockedTemplateId = null;
+    editState.selected.splice(idx, 1);
+    if (editState.selected.length === 0) editState.lockedTemplateId = null;
   } else {
-    if (editLockedTemplateId === null) editLockedTemplateId = templateId;
-    editSelected.push(combatantId);
+    if (editState.lockedTemplateId === null) editState.lockedTemplateId = templateId;
+    editState.selected.push(combatantId);
   }
   render();
 }
 
 function openEditForm() {
-  var combat = getActiveCombat();
-  if (!combat || editSelected.length === 0) return;
-  var selected = combat.combatants.filter(function(c) { return editSelected.indexOf(c.id) >= 0; });
+  const combat = getActiveCombat();
+  if (!combat || editState.selected.length === 0) return;
+  const selected = combat.combatants.filter(function(c) { return editState.selected.indexOf(c.id) >= 0; });
   if (selected.length === 0) return;
 
   // Get raw template for diffing
-  editRawTemplate = getRawTemplate(selected[0]);
-  if (!editRawTemplate) return;
+  editState.rawTemplate = getRawTemplate(selected[0]);
+  if (!editState.rawTemplate) return;
 
-  // Build editFormData from the first selected combatant's effective values
-  var firstEffective = getTemplate(selected[0]);
-  editFormData = deepClone(firstEffective);
+  // Build editState.formData from the first selected combatant's effective values
+  const firstEffective = getTemplate(selected[0]);
+  editState.formData = deepClone(firstEffective);
 
   // Detect conflicts: fields where selected combatants have different effective values
-  editConflicts.clear();
+  editState.conflicts.clear();
   if (selected.length > 1) {
-    var paths = flattenPaths(firstEffective, '');
+    const paths = flattenPaths(firstEffective, '');
     paths.forEach(function(path) {
-      var baseVal = getNestedValue(firstEffective, path);
-      for (var i = 1; i < selected.length; i++) {
-        var otherEffective = getTemplate(selected[i]);
-        var otherVal = getNestedValue(otherEffective, path);
+      const baseVal = getNestedValue(firstEffective, path);
+      for (let i = 1; i < selected.length; i++) {
+        const otherEffective = getTemplate(selected[i]);
+        const otherVal = getNestedValue(otherEffective, path);
         if (JSON.stringify(baseVal) !== JSON.stringify(otherVal)) {
-          editConflicts.add(path);
+          editState.conflicts.add(path);
           break;
         }
       }
     });
   }
 
-  editFormSnapshot = JSON.stringify(editFormData);
-  editFormVisible = true;
+  editState.formSnapshot = JSON.stringify(editState.formData);
+  editState.visible = true;
   render();
 }
 
 function isEditFormDirty() {
-  return JSON.stringify(editFormData) !== editFormSnapshot;
+  return JSON.stringify(editState.formData) !== editState.formSnapshot;
 }
 
 function getNestedValue(obj, path) {
-  var parts = path.split('.');
-  var cur = obj;
-  for (var i = 0; i < parts.length; i++) {
+  const parts = path.split('.');
+  let cur = obj;
+  for (let i = 0; i < parts.length; i++) {
     if (cur === null || cur === undefined) return undefined;
-    var key = parts[i];
+    const key = parts[i];
     if (Array.isArray(cur)) {
       cur = cur[parseInt(key)];
     } else {
@@ -3136,19 +3128,19 @@ function getNestedValue(obj, path) {
 }
 
 function flattenPaths(obj, prefix) {
-  var result = [];
+  let result = [];
   if (obj === null || obj === undefined || typeof obj !== 'object') {
     if (prefix) result.push(prefix);
     return result;
   }
   if (Array.isArray(obj)) {
     obj.forEach(function(item, i) {
-      var p = prefix ? prefix + '.' + i : '' + i;
+      const p = prefix ? prefix + '.' + i : '' + i;
       result = result.concat(flattenPaths(item, p));
     });
   } else {
     Object.keys(obj).forEach(function(key) {
-      var p = prefix ? prefix + '.' + key : key;
+      const p = prefix ? prefix + '.' + key : key;
       result = result.concat(flattenPaths(obj[key], p));
     });
   }
@@ -3156,21 +3148,21 @@ function flattenPaths(obj, prefix) {
 }
 
 function isEditFieldModified(fieldPath) {
-  var raw = getNestedValue(editRawTemplate, fieldPath);
-  var cur = getNestedValue(editFormData, fieldPath);
+  const raw = getNestedValue(editState.rawTemplate, fieldPath);
+  const cur = getNestedValue(editState.formData, fieldPath);
   return JSON.stringify(raw) !== JSON.stringify(cur);
 }
 
 function revertEditField(fieldPath) {
-  var parts = fieldPath.split('.');
-  var rawVal = getNestedValue(editRawTemplate, fieldPath);
-  var obj = editFormData;
-  for (var i = 0; i < parts.length - 1; i++) {
-    var key = parts[i];
+  const parts = fieldPath.split('.');
+  const rawVal = getNestedValue(editState.rawTemplate, fieldPath);
+  let obj = editState.formData;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
     if (Array.isArray(obj)) obj = obj[parseInt(key)];
     else obj = obj[key];
   }
-  var lastKey = parts[parts.length - 1];
+  const lastKey = parts[parts.length - 1];
   if (Array.isArray(obj)) obj[parseInt(lastKey)] = deepClone(rawVal);
   else obj[lastKey] = deepClone(rawVal);
   renderEditOverrideForm();
@@ -3178,57 +3170,61 @@ function revertEditField(fieldPath) {
 
 // Per-item revert for saves (matched by ability name)
 function isSaveItemModified(idx) {
-  var save = editFormData.savingThrows[idx];
+  const save = editState.formData.savingThrows[idx];
   if (!save) return false;
-  var ts = editRawTemplate.savingThrows.find(function(s) { return s.ability === save.ability; });
+  const ts = editState.rawTemplate.savingThrows.find(function(s) { return s.ability === save.ability; });
   if (!ts) return true; // added item — not in template
   return ts.bonus !== save.bonus;
 }
 function revertSaveItem(idx) {
-  var save = editFormData.savingThrows[idx];
+  const save = editState.formData.savingThrows[idx];
   if (!save) return;
-  var ts = editRawTemplate.savingThrows.find(function(s) { return s.ability === save.ability; });
-  if (ts) editFormData.savingThrows[idx] = deepClone(ts);
-  else editFormData.savingThrows.splice(idx, 1); // added item — remove it
+  const ts = editState.rawTemplate.savingThrows.find(function(s) { return s.ability === save.ability; });
+  if (ts) editState.formData.savingThrows[idx] = deepClone(ts);
+  else editState.formData.savingThrows.splice(idx, 1); // added item — remove it
   renderEditOverrideForm();
 }
 function restoreDeletedSave(ability) {
-  var ts = editRawTemplate.savingThrows.find(function(s) { return s.ability === ability; });
-  if (ts) editFormData.savingThrows.push(deepClone(ts));
+  const ts = editState.rawTemplate.savingThrows.find(function(s) { return s.ability === ability; });
+  if (ts) editState.formData.savingThrows.push(deepClone(ts));
   renderEditOverrideForm();
 }
 
 // Per-item revert for skills (matched by skill name)
 function isSkillItemModified(idx) {
-  var skill = editFormData.skills[idx];
+  const skill = editState.formData.skills[idx];
   if (!skill) return false;
-  var ts = editRawTemplate.skills.find(function(s) { return s.name === skill.name; });
+  const ts = editState.rawTemplate.skills.find(function(s) { return s.name === skill.name; });
   if (!ts) return true; // added item — not in template
   return ts.bonus !== skill.bonus;
 }
 function revertSkillItem(idx) {
-  var skill = editFormData.skills[idx];
+  const skill = editState.formData.skills[idx];
   if (!skill) return;
-  var ts = editRawTemplate.skills.find(function(s) { return s.name === skill.name; });
-  if (ts) editFormData.skills[idx] = deepClone(ts);
-  else editFormData.skills.splice(idx, 1); // added item — remove it
+  const ts = editState.rawTemplate.skills.find(function(s) { return s.name === skill.name; });
+  if (ts) editState.formData.skills[idx] = deepClone(ts);
+  else editState.formData.skills.splice(idx, 1); // added item — remove it
   renderEditOverrideForm();
 }
 function restoreDeletedSkill(name) {
-  var ts = editRawTemplate.skills.find(function(s) { return s.name === name; });
-  if (ts) editFormData.skills.push(deepClone(ts));
+  const ts = editState.rawTemplate.skills.find(function(s) { return s.name === name; });
+  if (ts) editState.formData.skills.push(deepClone(ts));
   renderEditOverrideForm();
 }
 
 function editFieldAttr(fieldPath) {
-  var cls = '';
-  if (editConflicts.has(fieldPath)) cls = ' class="edit-field-conflict" disabled title="Varies across selected combatants"';
+  let cls = '';
+  if (editState.conflicts.has(fieldPath)) cls = ' class="edit-field-conflict" disabled placeholder="Varies" title="Varies across selected combatants"';
   else if (isEditFieldModified(fieldPath)) cls = ' class="edit-field-modified"';
   return cls;
 }
 
+function editVal(val, fieldPath) {
+  return editState.conflicts.has(fieldPath) ? '' : val;
+}
+
 function editRevertBtn(fieldPath) {
-  if (editConflicts.has(fieldPath)) return '';
+  if (editState.conflicts.has(fieldPath)) return '';
   if (!isEditFieldModified(fieldPath)) return '';
   return ' <button class="btn-revert" onclick="revertEditField(\'' + fieldPath + '\')" title="Revert to template">↩</button>';
 }
@@ -3240,18 +3236,18 @@ function ovh(c, fieldPath, content) {
 }
 
 function applyEditOverrides() {
-  var combat = getActiveCombat();
+  const combat = getActiveCombat();
   if (!combat) { exitEditMode(); return; }
-  var overrides = sparseOverrides(editRawTemplate, editFormData);
-  var count = 0;
-  editSelected.forEach(function(cId) {
-    var c = combat.combatants.find(function(cb) { return cb.id === cId; });
+  const overrides = sparseOverrides(editState.rawTemplate, editState.formData);
+  let count = 0;
+  editState.selected.forEach(function(cId) {
+    const c = combat.combatants.find(function(cb) { return cb.id === cId; });
     if (!c) return;
-    if (editConflicts.size > 0 && c.overrides) {
+    if (editState.conflicts.size > 0 && c.overrides) {
       // Preserve existing overrides for conflicting fields
-      var preserved = {};
-      editConflicts.forEach(function(path) {
-        var val = getNestedValue(c.overrides, path);
+      const preserved = {};
+      editState.conflicts.forEach(function(path) {
+        const val = getNestedValue(c.overrides, path);
         if (val !== undefined) {
           setNestedValue(preserved, path, deepClone(val));
         }
@@ -3267,7 +3263,7 @@ function applyEditOverrides() {
     count++;
   });
   saveCombat();
-  editFormSnapshot = JSON.stringify(editFormData);
+  editState.formSnapshot = JSON.stringify(editState.formData);
   setStatus('Applied overrides to ' + count + ' combatant' + (count !== 1 ? 's' : ''), 'success');
 }
 
@@ -3279,13 +3275,13 @@ function closeEditOverrides() {
 }
 
 function setNestedValue(obj, path, val) {
-  var parts = path.split('.');
-  var cur = obj;
-  for (var i = 0; i < parts.length - 1; i++) {
-    var key = parts[i];
+  const parts = path.split('.');
+  let cur = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
     if (cur[key] === undefined) {
       // If the next key is numeric, create an array instead of an object
-      var nextKey = parts[i + 1];
+      const nextKey = parts[i + 1];
       cur[key] = (!isNaN(parseInt(nextKey)) && String(parseInt(nextKey)) === nextKey) ? [] : {};
     }
     cur = cur[key];
@@ -3302,54 +3298,54 @@ function cancelEditOverrides() {
 }
 
 function editSingleCombatant(idx) {
-  var combat = getActiveCombat();
+  const combat = getActiveCombat();
   if (!combat) return;
-  var c = combat.combatants[idx];
+  const c = combat.combatants[idx];
   if (!c || c.type !== 'monster') return;
-  editMode = true;
-  editSelected = [c.id];
-  editLockedTemplateId = c.templateId;
+  editState.mode = true;
+  editState.selected = [c.id];
+  editState.lockedTemplateId = c.templateId;
   openEditForm();
 }
 
 function renderEditOverrideForm() {
-  var el = document.getElementById('editOverrideContainer');
-  if (!el || !editFormData || !editRawTemplate) return;
-  var d = editFormData;
-  var html = '';
+  const el = document.getElementById('editOverrideContainer');
+  if (!el || !editState.formData || !editState.rawTemplate) return;
+  const d = editState.formData;
+  let html = '';
 
-  html += '<div class="form-section"><div class="form-section-title">Editing ' + editSelected.length + ' combatant' + (editSelected.length !== 1 ? 's' : '') + ' — ' + esc(editRawTemplate.name) + '</div></div>';
+  html += '<div class="form-section"><div class="form-section-title">Editing ' + editState.selected.length + ' combatant' + (editState.selected.length !== 1 ? 's' : '') + ' — ' + esc(editState.rawTemplate.name) + '</div></div>';
 
   // ── Basic Info ──
   html += '<div class="form-section"><div class="form-section-title">Basic Info</div>';
   html += '<div class="form-grid cols-4">';
-  html += editField('Name', 'text', d.name, 'editFormData.name=this.value', 'name');
-  html += editField('Size', 'text', d.size, 'editFormData.size=this.value', 'size');
-  html += editField('Type', 'text', d.type, 'editFormData.type=this.value', 'type');
-  html += editField('Alignment', 'text', d.alignment, 'editFormData.alignment=this.value', 'alignment');
+  html += editField('Name', 'text', d.name, 'editState.formData.name=this.value', 'name');
+  html += editField('Size', 'text', d.size, 'editState.formData.size=this.value', 'size');
+  html += editField('Type', 'text', d.type, 'editState.formData.type=this.value', 'type');
+  html += editField('Alignment', 'text', d.alignment, 'editState.formData.alignment=this.value', 'alignment');
   html += '</div>';
   html += '<div class="form-grid cols-4" style="margin-top:0.5rem">';
-  html += editField('AC', 'number', d.ac, 'editFormData.ac=+this.value', 'ac');
-  html += editField('AC Note', 'text', d.acNote, 'editFormData.acNote=this.value', 'acNote');
-  html += editField('HP Max', 'number', d.hpMax, 'editFormData.hpMax=+this.value', 'hpMax');
-  html += editField('HP Formula', 'text', d.hpFormula, 'editFormData.hpFormula=this.value', 'hpFormula');
+  html += editField('AC', 'number', d.ac, 'editState.formData.ac=+this.value', 'ac');
+  html += editField('AC Note', 'text', d.acNote, 'editState.formData.acNote=this.value', 'acNote');
+  html += editField('HP Max', 'number', d.hpMax, 'editState.formData.hpMax=+this.value', 'hpMax');
+  html += editField('HP Formula', 'text', d.hpFormula, 'editState.formData.hpFormula=this.value', 'hpFormula');
   html += '</div>';
   html += '<div class="form-grid cols-4" style="margin-top:0.5rem">';
-  html += editField('Speed', 'text', d.speed, 'editFormData.speed=this.value', 'speed');
-  html += editField('CR', 'text', d.cr, 'editFormData.cr=this.value', 'cr');
-  html += editField('Init Bonus', 'number', d.initBonus, 'editFormData.initBonus=+this.value', 'initBonus');
-  html += '<div class="form-field"><div style="display:flex;gap:0.3rem;align-items:center"><label class="checkbox-label"><input type="checkbox" ' + (d.initAdvantage ? 'checked' : '') + ' onchange="editFormData.initAdvantage=this.checked"' + editFieldAttr('initAdvantage') + '> Init Advantage</label>' + editRevertBtn('initAdvantage') + '</div></div>';
+  html += editField('Speed', 'text', d.speed, 'editState.formData.speed=this.value', 'speed');
+  html += editField('CR', 'text', d.cr, 'editState.formData.cr=this.value', 'cr');
+  html += editField('Init Bonus', 'number', d.initBonus, 'editState.formData.initBonus=+this.value', 'initBonus');
+  html += '<div class="form-field"><div class="flex-row-tight"><label class="checkbox-label"><input type="checkbox" ' + (d.initAdvantage ? 'checked' : '') + ' onchange="editState.formData.initAdvantage=this.checked"' + editFieldAttr('initAdvantage') + '> Init Advantage</label>' + editRevertBtn('initAdvantage') + '</div></div>';
   html += '</div></div>';
 
   // ── Ability Scores ──
   html += '<div class="form-section"><div class="form-section-title">Ability Scores</div>';
   html += '<div class="form-grid cols-6">';
   ABILITIES.forEach(function(ab) {
-    var score = d.abilities[ab];
-    var fp = 'abilities.' + ab;
+    const score = d.abilities[ab];
+    const fp = 'abilities.' + ab;
     html += '<div class="form-field"><label>' + ab.toUpperCase() + ' (' + modStr(score) + ')</label>';
-    html += '<div style="display:flex;gap:0.3rem;align-items:center">';
-    html += '<input type="number" value="' + score + '" onchange="editFormData.abilities.' + ab + '=+this.value" style="flex:1"' + editFieldAttr(fp) + '>';
+    html += '<div class="flex-row-tight">';
+    html += '<input type="number" value="' + editVal(score, fp) + '" onchange="editState.formData.abilities.' + ab + '=+this.value" style="flex:1"' + editFieldAttr(fp) + '>';
     html += editRevertBtn(fp);
     html += '</div></div>';
   });
@@ -3358,99 +3354,99 @@ function renderEditOverrideForm() {
   // ── Saving Throws (add/remove allowed, per-item revert) ──
   html += '<div class="form-section"><div class="form-section-title">Saving Throws</div>';
   d.savingThrows.forEach(function(st, i) {
-    var itemMod = isSaveItemModified(i);
+    const itemMod = isSaveItemModified(i);
     html += '<div class="dyn-row">';
-    html += '<select onchange="editFormData.savingThrows[' + i + '].ability=this.value;renderEditOverrideForm()" style="width:120px">';
+    html += '<select onchange="editState.formData.savingThrows[' + i + '].ability=this.value;renderEditOverrideForm()" style="width:120px">';
     ABILITIES.forEach(function(ab) {
       html += '<option value="' + ab + '"' + (st.ability === ab ? ' selected' : '') + '>' + ABILITY_NAMES[ab] + '</option>';
     });
     html += '</select>';
-    html += '<input type="number" value="' + st.bonus + '" onchange="editFormData.savingThrows[' + i + '].bonus=+this.value;renderEditOverrideForm()" style="width:60px" placeholder="+0"' + (itemMod ? ' class="edit-field-modified"' : '') + '>';
+    html += '<input type="number" value="' + st.bonus + '" onchange="editState.formData.savingThrows[' + i + '].bonus=+this.value;renderEditOverrideForm()" style="width:60px" placeholder="+0"' + (itemMod ? ' class="edit-field-modified"' : '') + '>';
     if (itemMod) html += '<button class="btn-revert" onclick="revertSaveItem(' + i + ')" title="Revert to template">↩</button>';
-    html += '<button class="btn-remove" onclick="editFormData.savingThrows.splice(' + i + ',1);renderEditOverrideForm()">×</button>';
+    html += '<button class="btn-remove" onclick="editState.formData.savingThrows.splice(' + i + ',1);renderEditOverrideForm()">×</button>';
     html += '</div>';
   });
-  // Show deleted saves (in template but not in editFormData) with restore buttons
-  var deletedSaves = editRawTemplate.savingThrows.filter(function(ts) {
+  // Show deleted saves (in template but not in editState.formData) with restore buttons
+  const deletedSaves = editState.rawTemplate.savingThrows.filter(function(ts) {
     return !d.savingThrows.some(function(s) { return s.ability === ts.ability; });
   });
   deletedSaves.forEach(function(ds) {
     html += '<div class="dyn-row"><span style="text-decoration:line-through;opacity:0.5">' + ABILITY_NAMES[ds.ability] + ' +' + ds.bonus + '</span>';
     html += '<button class="btn-revert" onclick="restoreDeletedSave(\'' + ds.ability + '\')" title="Restore from template">↩</button></div>';
   });
-  html += '<button class="btn-add-row" onclick="editFormData.savingThrows.push({ability:\'str\',bonus:0});renderEditOverrideForm()">+ Add Save</button>';
+  html += '<button class="btn-add-row" onclick="editState.formData.savingThrows.push({ability:\'str\',bonus:0});renderEditOverrideForm()">+ Add Save</button>';
   html += '</div>';
 
   // ── Skills (add/remove allowed, per-item revert) ──
   html += '<div class="form-section"><div class="form-section-title">Skills</div>';
   d.skills.forEach(function(sk, i) {
-    var itemMod = isSkillItemModified(i);
+    const itemMod = isSkillItemModified(i);
     html += '<div class="dyn-row">';
-    html += '<select onchange="editFormData.skills[' + i + '].name=this.value;renderEditOverrideForm()" style="width:150px">';
+    html += '<select onchange="editState.formData.skills[' + i + '].name=this.value;renderEditOverrideForm()" style="width:150px">';
     SKILLS.forEach(function(s) {
       html += '<option value="' + s + '"' + (sk.name === s ? ' selected' : '') + '>' + s + '</option>';
     });
     html += '</select>';
-    html += '<input type="number" value="' + sk.bonus + '" onchange="editFormData.skills[' + i + '].bonus=+this.value;renderEditOverrideForm()" style="width:60px" placeholder="+0"' + (itemMod ? ' class="edit-field-modified"' : '') + '>';
+    html += '<input type="number" value="' + sk.bonus + '" onchange="editState.formData.skills[' + i + '].bonus=+this.value;renderEditOverrideForm()" style="width:60px" placeholder="+0"' + (itemMod ? ' class="edit-field-modified"' : '') + '>';
     if (itemMod) html += '<button class="btn-revert" onclick="revertSkillItem(' + i + ')" title="Revert to template">↩</button>';
-    html += '<button class="btn-remove" onclick="editFormData.skills.splice(' + i + ',1);renderEditOverrideForm()">×</button>';
+    html += '<button class="btn-remove" onclick="editState.formData.skills.splice(' + i + ',1);renderEditOverrideForm()">×</button>';
     html += '</div>';
   });
-  // Show deleted skills (in template but not in editFormData) with restore buttons
-  var deletedSkills = editRawTemplate.skills.filter(function(ts) {
+  // Show deleted skills (in template but not in editState.formData) with restore buttons
+  const deletedSkills = editState.rawTemplate.skills.filter(function(ts) {
     return !d.skills.some(function(s) { return s.name === ts.name; });
   });
   deletedSkills.forEach(function(ds) {
     html += '<div class="dyn-row"><span style="text-decoration:line-through;opacity:0.5">' + esc(ds.name) + ' +' + ds.bonus + '</span>';
     html += '<button class="btn-revert" onclick="restoreDeletedSkill(\'' + esc(ds.name).replace(/'/g, "\\'") + '\')" title="Restore from template">↩</button></div>';
   });
-  html += '<button class="btn-add-row" onclick="editFormData.skills.push({name:\'Perception\',bonus:0});renderEditOverrideForm()">+ Add Skill</button>';
+  html += '<button class="btn-add-row" onclick="editState.formData.skills.push({name:\'Perception\',bonus:0});renderEditOverrideForm()">+ Add Skill</button>';
   html += '</div>';
 
   // ── Defenses ──
   html += '<div class="form-section"><div class="form-section-title">Defenses & Senses</div>';
   html += '<div class="form-grid cols-2">';
-  html += editField('Damage Resistances', 'text', d.damageResistances, 'editFormData.damageResistances=this.value', 'damageResistances');
-  html += editField('Damage Immunities', 'text', d.damageImmunities, 'editFormData.damageImmunities=this.value', 'damageImmunities');
-  html += editField('Damage Vulnerabilities', 'text', d.damageVulnerabilities, 'editFormData.damageVulnerabilities=this.value', 'damageVulnerabilities');
-  html += editField('Condition Immunities', 'text', d.conditionImmunities, 'editFormData.conditionImmunities=this.value', 'conditionImmunities');
-  html += editField('Senses', 'text', d.senses, 'editFormData.senses=this.value', 'senses');
-  html += editField('Languages', 'text', d.languages, 'editFormData.languages=this.value', 'languages');
+  html += editField('Damage Resistances', 'text', d.damageResistances, 'editState.formData.damageResistances=this.value', 'damageResistances');
+  html += editField('Damage Immunities', 'text', d.damageImmunities, 'editState.formData.damageImmunities=this.value', 'damageImmunities');
+  html += editField('Damage Vulnerabilities', 'text', d.damageVulnerabilities, 'editState.formData.damageVulnerabilities=this.value', 'damageVulnerabilities');
+  html += editField('Condition Immunities', 'text', d.conditionImmunities, 'editState.formData.conditionImmunities=this.value', 'conditionImmunities');
+  html += editField('Senses', 'text', d.senses, 'editState.formData.senses=this.value', 'senses');
+  html += editField('Languages', 'text', d.languages, 'editState.formData.languages=this.value', 'languages');
   html += '</div>';
   html += '<div class="form-grid cols-2" style="margin-top:0.5rem">';
-  html += editField('Passive Perception', 'number', d.passivePerception != null ? d.passivePerception : '', 'editFormData.passivePerception=this.value===\'\'?null:+this.value', 'passivePerception');
+  html += editField('Passive Perception', 'number', d.passivePerception != null ? d.passivePerception : '', 'editState.formData.passivePerception=this.value===\'\'?null:+this.value', 'passivePerception');
   html += '<div class="form-field"></div>';
   html += '</div></div>';
 
   // ── Attacks (no add/remove - index-referenced) ──
   html += '<div class="form-section"><div class="form-section-title">Attacks</div>';
   html += '<div class="form-grid cols-2">';
-  html += editField('Multiattack', 'text', d.multiattack, 'editFormData.multiattack=this.value', 'multiattack');
-  html += editField('Crits On', 'number', d.critRange || 20, 'editFormData.critRange=+this.value||20', 'critRange');
+  html += editField('Multiattack', 'text', d.multiattack, 'editState.formData.multiattack=this.value', 'multiattack');
+  html += editField('Crits On', 'number', d.critRange || 20, 'editState.formData.critRange=+this.value||20', 'critRange');
   html += '</div>';
   html += '<div style="margin-top:0.5rem">';
   d.attacks.forEach(function(a, i) {
-    var afp = 'attacks.' + i;
+    const afp = 'attacks.' + i;
     html += '<div class="card" style="padding:0.6rem 0.75rem;margin-bottom:0.4rem">';
     html += '<div class="dyn-row" style="margin-bottom:0.3rem">';
-    html += '<input type="text" value="' + esc(a.name) + '" onchange="editFormData.attacks[' + i + '].name=this.value" placeholder="Name" style="flex:2"' + editFieldAttr(afp + '.name') + '>';
+    html += '<input type="text" value="' + esc(editVal(a.name, afp + '.name')) + '" onchange="editState.formData.attacks[' + i + '].name=this.value" placeholder="Name" style="flex:2"' + editFieldAttr(afp + '.name') + '>';
     html += editRevertBtn(afp + '.name');
-    html += '<input type="number" value="' + a.bonus + '" onchange="editFormData.attacks[' + i + '].bonus=+this.value" placeholder="+4" style="width:55px"' + editFieldAttr(afp + '.bonus') + '>';
+    html += '<input type="number" value="' + editVal(a.bonus, afp + '.bonus') + '" onchange="editState.formData.attacks[' + i + '].bonus=+this.value" placeholder="+4" style="width:55px"' + editFieldAttr(afp + '.bonus') + '>';
     html += editRevertBtn(afp + '.bonus');
-    html += '<input type="text" value="' + esc(a.note || '') + '" onchange="editFormData.attacks[' + i + '].note=this.value" placeholder="note" style="flex:1"' + editFieldAttr(afp + '.note') + '>';
+    html += '<input type="text" value="' + esc(editVal(a.note || '', afp + '.note')) + '" onchange="editState.formData.attacks[' + i + '].note=this.value" placeholder="note" style="flex:1"' + editFieldAttr(afp + '.note') + '>';
     html += editRevertBtn(afp + '.note');
     html += '</div>';
     // Damage rows (no add/remove)
     if (a.damages && a.damages.length > 0) {
       html += '<div style="padding-left:0.75rem;border-left:2px solid var(--border)">';
       a.damages.forEach(function(dm, j) {
-        var dfp = afp + '.damages.' + j;
+        const dfp = afp + '.damages.' + j;
         html += '<div class="dyn-row">';
-        html += '<input type="text" value="' + esc(dm.dice) + '" onchange="editFormData.attacks[' + i + '].damages[' + j + '].dice=this.value" placeholder="1d8+2" style="width:80px"' + editFieldAttr(dfp + '.dice') + '>';
+        html += '<input type="text" value="' + esc(editVal(dm.dice, dfp + '.dice')) + '" onchange="editState.formData.attacks[' + i + '].damages[' + j + '].dice=this.value" placeholder="1d8+2" style="width:80px"' + editFieldAttr(dfp + '.dice') + '>';
         html += editRevertBtn(dfp + '.dice');
-        html += '<input type="text" value="' + esc(dm.type) + '" onchange="editFormData.attacks[' + i + '].damages[' + j + '].type=this.value" placeholder="slashing" style="width:80px"' + editFieldAttr(dfp + '.type') + '>';
+        html += '<input type="text" value="' + esc(editVal(dm.type, dfp + '.type')) + '" onchange="editState.formData.attacks[' + i + '].damages[' + j + '].type=this.value" placeholder="slashing" style="width:80px"' + editFieldAttr(dfp + '.type') + '>';
         html += editRevertBtn(dfp + '.type');
-        html += '<input type="text" value="' + esc(dm.note || '') + '" onchange="editFormData.attacks[' + i + '].damages[' + j + '].note=this.value" placeholder="note" style="flex:1"' + editFieldAttr(dfp + '.note') + '>';
+        html += '<input type="text" value="' + esc(editVal(dm.note || '', dfp + '.note')) + '" onchange="editState.formData.attacks[' + i + '].damages[' + j + '].note=this.value" placeholder="note" style="flex:1"' + editFieldAttr(dfp + '.note') + '>';
         html += editRevertBtn(dfp + '.note');
         html += '</div>';
       });
@@ -3463,17 +3459,17 @@ function renderEditOverrideForm() {
   // ── Features (no add/remove - index-referenced) ──
   html += '<div class="form-section"><div class="form-section-title">Features & Abilities</div>';
   d.features.forEach(function(f, i) {
-    var ffp = 'features.' + i;
+    const ffp = 'features.' + i;
     html += '<div class="dyn-row" style="flex-direction:column">';
     html += '<div style="display:flex;gap:0.4rem;width:100%">';
-    html += '<input type="text" value="' + esc(f.name) + '" onchange="editFormData.features[' + i + '].name=this.value" placeholder="Feature name" style="flex:2"' + editFieldAttr(ffp + '.name') + '>';
+    html += '<input type="text" value="' + esc(editVal(f.name, ffp + '.name')) + '" onchange="editState.formData.features[' + i + '].name=this.value" placeholder="Feature name" style="flex:2"' + editFieldAttr(ffp + '.name') + '>';
     html += editRevertBtn(ffp + '.name');
-    html += '<input type="text" value="' + esc(f.recharge || '') + '" onchange="editFormData.features[' + i + '].recharge=this.value||null" placeholder="5-6" style="width:100px"' + editFieldAttr(ffp + '.recharge') + '>';
+    html += '<input type="text" value="' + esc(editVal(f.recharge || '', ffp + '.recharge')) + '" onchange="editState.formData.features[' + i + '].recharge=this.value||null" placeholder="5-6" style="width:100px"' + editFieldAttr(ffp + '.recharge') + '>';
     html += editRevertBtn(ffp + '.recharge');
-    html += '<input type="number" value="' + (f.usesMax || '') + '" onchange="editFormData.features[' + i + '].usesMax=+this.value||null" placeholder="#" style="width:55px"' + editFieldAttr(ffp + '.usesMax') + '>';
+    html += '<input type="number" value="' + editVal(f.usesMax || '', ffp + '.usesMax') + '" onchange="editState.formData.features[' + i + '].usesMax=+this.value||null" placeholder="#" style="width:55px"' + editFieldAttr(ffp + '.usesMax') + '>';
     html += editRevertBtn(ffp + '.usesMax');
     html += '</div>';
-    html += '<textarea onchange="editFormData.features[' + i + '].desc=this.value" placeholder="Description..." style="width:100%"' + editFieldAttr(ffp + '.desc') + '>' + esc(f.desc) + '</textarea>';
+    html += '<textarea onchange="editState.formData.features[' + i + '].desc=this.value" placeholder="Description..." style="width:100%"' + editFieldAttr(ffp + '.desc') + '>' + esc(editVal(f.desc, ffp + '.desc')) + '</textarea>';
     html += editRevertBtn(ffp + '.desc');
     html += '</div>';
   });
@@ -3482,21 +3478,21 @@ function renderEditOverrideForm() {
   // ── Legendary ──
   html += '<div class="form-section"><div class="form-section-title">Legendary</div>';
   html += '<div class="form-grid cols-2">';
-  html += editField('Actions/Round', 'number', d.legendaryActionBudget, 'editFormData.legendaryActionBudget=+this.value', 'legendaryActionBudget');
-  html += editField('Resistances', 'number', d.legendaryResistances, 'editFormData.legendaryResistances=+this.value', 'legendaryResistances');
+  html += editField('Actions/Round', 'number', d.legendaryActionBudget, 'editState.formData.legendaryActionBudget=+this.value', 'legendaryActionBudget');
+  html += editField('Resistances', 'number', d.legendaryResistances, 'editState.formData.legendaryResistances=+this.value', 'legendaryResistances');
   html += '</div>';
   if (d.legendaryActionBudget > 0 || d.legendaryActions.length > 0) {
     html += '<div style="margin-top:0.5rem">';
     d.legendaryActions.forEach(function(la, i) {
-      var lfp = 'legendaryActions.' + i;
+      const lfp = 'legendaryActions.' + i;
       html += '<div class="dyn-row" style="flex-direction:column">';
       html += '<div style="display:flex;gap:0.4rem;width:100%">';
-      html += '<input type="text" value="' + esc(la.name) + '" onchange="editFormData.legendaryActions[' + i + '].name=this.value" placeholder="Action name" style="flex:2"' + editFieldAttr(lfp + '.name') + '>';
+      html += '<input type="text" value="' + esc(editVal(la.name, lfp + '.name')) + '" onchange="editState.formData.legendaryActions[' + i + '].name=this.value" placeholder="Action name" style="flex:2"' + editFieldAttr(lfp + '.name') + '>';
       html += editRevertBtn(lfp + '.name');
-      html += '<input type="number" value="' + la.cost + '" onchange="editFormData.legendaryActions[' + i + '].cost=+this.value" placeholder="#" style="width:55px"' + editFieldAttr(lfp + '.cost') + '>';
+      html += '<input type="number" value="' + editVal(la.cost, lfp + '.cost') + '" onchange="editState.formData.legendaryActions[' + i + '].cost=+this.value" placeholder="#" style="width:55px"' + editFieldAttr(lfp + '.cost') + '>';
       html += editRevertBtn(lfp + '.cost');
       html += '</div>';
-      html += '<textarea onchange="editFormData.legendaryActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%"' + editFieldAttr(lfp + '.desc') + '>' + esc(la.desc) + '</textarea>';
+      html += '<textarea onchange="editState.formData.legendaryActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%"' + editFieldAttr(lfp + '.desc') + '>' + esc(editVal(la.desc, lfp + '.desc')) + '</textarea>';
       html += editRevertBtn(lfp + '.desc');
       html += '</div>';
     });
@@ -3506,18 +3502,18 @@ function renderEditOverrideForm() {
 
   // ── Tactics ──
   html += '<div class="form-section"><div class="form-section-title">Tactics & Notes</div>';
-  html += '<div class="form-field"><div style="display:flex;gap:0.3rem;align-items:flex-start"><textarea rows="3" onchange="editFormData.tactics=this.value" placeholder="How this monster fights..." style="flex:1"' + editFieldAttr('tactics') + '>' + esc(d.tactics) + '</textarea>';
+  html += '<div class="form-field"><div style="display:flex;gap:0.3rem;align-items:flex-start"><textarea rows="3" onchange="editState.formData.tactics=this.value" placeholder="How this monster fights..." style="flex:1"' + editFieldAttr('tactics') + '>' + esc(editVal(d.tactics, 'tactics')) + '</textarea>';
   html += editRevertBtn('tactics');
   html += '</div></div></div>';
 
   // ── Descriptions ──
   html += '<div class="form-section"><div class="form-section-title">Descriptions</div>';
   html += '<div class="form-field"><label>Player Description</label>';
-  html += '<div style="display:flex;gap:0.3rem;align-items:flex-start"><textarea rows="3" onchange="editFormData.playerDescription=this.value" placeholder="What players see..." style="flex:1"' + editFieldAttr('playerDescription') + '>' + esc(d.playerDescription || '') + '</textarea>';
+  html += '<div style="display:flex;gap:0.3rem;align-items:flex-start"><textarea rows="3" onchange="editState.formData.playerDescription=this.value" placeholder="What players see..." style="flex:1"' + editFieldAttr('playerDescription') + '>' + esc(editVal(d.playerDescription || '', 'playerDescription')) + '</textarea>';
   html += editRevertBtn('playerDescription');
   html += '</div></div>';
   html += '<div class="form-field"><label>DM Description</label>';
-  html += '<div style="display:flex;gap:0.3rem;align-items:flex-start"><textarea rows="3" onchange="editFormData.dmDescription=this.value" placeholder="Lore, behavior, SRD reference..." style="flex:1"' + editFieldAttr('dmDescription') + '>' + esc(d.dmDescription || '') + '</textarea>';
+  html += '<div style="display:flex;gap:0.3rem;align-items:flex-start"><textarea rows="3" onchange="editState.formData.dmDescription=this.value" placeholder="Lore, behavior, SRD reference..." style="flex:1"' + editFieldAttr('dmDescription') + '>' + esc(editVal(d.dmDescription || '', 'dmDescription')) + '</textarea>';
   html += editRevertBtn('dmDescription');
   html += '</div></div></div>';
 
@@ -3532,16 +3528,16 @@ function renderEditOverrideForm() {
 }
 
 function editField(label, type, value, onchange, fieldPath) {
-  var modified = !editConflicts.has(fieldPath) && isEditFieldModified(fieldPath);
-  var conflict = editConflicts.has(fieldPath);
-  var html = '<div class="form-field"><label>' + esc(label) + '</label>';
-  html += '<div style="display:flex;gap:0.3rem;align-items:center">';
+  const modified = !editState.conflicts.has(fieldPath) && isEditFieldModified(fieldPath);
+  const conflict = editState.conflicts.has(fieldPath);
+  let html = '<div class="form-field"><label>' + esc(label) + '</label>';
+  html += '<div class="flex-row-tight">';
   if (type === 'number') {
-    html += '<input type="number" value="' + (value ?? '') + '" onchange="' + onchange + '" style="flex:1"';
+    html += '<input type="number" value="' + (conflict ? '' : (value ?? '')) + '" onchange="' + onchange + '" style="flex:1"';
   } else {
-    html += '<input type="text" value="' + esc(value || '') + '" onchange="' + onchange + '" style="flex:1"';
+    html += '<input type="text" value="' + (conflict ? '' : esc(value || '')) + '" onchange="' + onchange + '" style="flex:1"';
   }
-  if (conflict) html += ' class="edit-field-conflict" disabled title="Varies across selected combatants"';
+  if (conflict) html += ' class="edit-field-conflict" disabled placeholder="Varies" title="Varies across selected combatants"';
   else if (modified) html += ' class="edit-field-modified"';
   html += '>';
   html += editRevertBtn(fieldPath);
@@ -3550,35 +3546,80 @@ function editField(label, type, value, onchange, fieldPath) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ── Render Helpers ──
+// ═══════════════════════════════════════════════════════════════
+
+function getCombatantHp(c, template) {
+  const maxHp = template ? template.hpMax : (c.hpMax || c.currentHp);
+  const curHp = c.currentHp !== undefined ? c.currentHp : maxHp;
+  const tempHp = c.tempHp || 0;
+  return { curHp, maxHp, tempHp };
+}
+
+function renderHpBar(curHp, maxHp, tempHp) {
+  const pct = maxHp > 0 ? Math.max(0, Math.min(100, Math.round((curHp / maxHp) * 100))) : 0;
+  const hpClass = pct > 50 ? 'hp-high' : pct > 25 ? 'hp-mid' : 'hp-low';
+  let html = '<div class="hp-bar-container">';
+  html += '<div class="hp-bar-fill ' + hpClass + '" style="width:' + pct + '%"></div>';
+  html += '<span class="hp-bar-text">' + curHp + (tempHp > 0 ? '+' + tempHp : '') + '/' + maxHp + '</span>';
+  html += '</div>';
+  return html;
+}
+
+function createModal(id, title, bodyHtml, opts) {
+  const existing = document.getElementById(id);
+  if (existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.id = id;
+  modal.className = 'modal-overlay';
+  if (opts && opts.clickOutsideClose) {
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+  }
+  modal.innerHTML = '<div class="modal-content' + (opts && opts.wide ? ' modal-wide' : '') + '"' +
+    (opts && opts.clickOutsideClose ? ' onclick="event.stopPropagation()"' : '') + '>' +
+    '<div class="form-section-title" style="margin-bottom:' + (opts && opts.titleMargin || '0.75rem') + '">' + title + '</div>' +
+    bodyHtml + '</div>';
+  document.body.appendChild(modal);
+  if (opts && opts.focusId) {
+    setTimeout(function() { const el = document.getElementById(opts.focusId); if (el) el.focus(); }, 50);
+  }
+  if (opts && opts.escapeClose) {
+    const handler = function(e) { if (e.key === 'Escape') { modal.remove(); document.removeEventListener('keydown', handler); } };
+    document.addEventListener('keydown', handler);
+  }
+  return modal;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // ── Active Combat ──
 // ═══════════════════════════════════════════════════════════════
 
-function renderActiveCombat(el) {
-  const combat = getActiveCombat();
+function renderCombatBar(combat) {
   let html = '';
-
-  // ── Combat Bar ──
-  var editDisabled = editMode ? ' disabled style="opacity:0.4"' : '';
+  const editDisabled = editState.mode ? ' disabled style="opacity:0.4"' : '';
   html += '<div class="combat-bar">';
   if (state.combats.length > 1) {
     html += '<button class="btn-sm" onclick="activeCombatId=null;saveCombat();render()" title="Back to combat list"' + editDisabled + '>&laquo; List</button>';
   }
   html += '<span class="round-badge">Round ' + combat.round + '</span>';
-  var atStart = combat.round === 1 && combat.turnIndex === 0;
-  html += '<button class="btn-sm" onclick="prevTurn()"' + (editMode ? editDisabled : (atStart ? ' disabled style="opacity:0.4"' : '')) + '>&laquo; Prev</button>';
+  const atStart = combat.round === 1 && combat.turnIndex === 0;
+  html += '<button class="btn-sm" onclick="prevTurn()"' + (editState.mode ? editDisabled : (atStart ? ' disabled style="opacity:0.4"' : '')) + '>&laquo; Prev</button>';
   html += '<button class="btn-sm btn-action" onclick="nextTurn()"' + editDisabled + '>Next &raquo;</button>';
   html += '<div class="spacer"></div>';
-  if (editMode && !editFormVisible) {
-    html += '<button class="btn-sm btn-action" onclick="openEditForm()"' + (editSelected.length === 0 ? ' disabled style="opacity:0.4"' : '') + '>Edit Selected</button>';
+  if (editState.mode && !editState.visible) {
+    html += '<button class="btn-sm btn-action" onclick="openEditForm()"' + (editState.selected.length === 0 ? ' disabled style="opacity:0.4"' : '') + '>Edit Selected</button>';
   }
-  html += '<button class="btn-sm' + (editMode ? ' btn-warning' : '') + '" onclick="toggleEditMode()">' + (editMode ? 'Exit Edit' : 'Edit Mode') + '</button>';
+  html += '<button class="btn-sm' + (editState.mode ? ' btn-warning' : '') + '" onclick="toggleEditMode()">' + (editState.mode ? 'Exit Edit' : 'Edit Mode') + '</button>';
   html += '<button class="btn-sm" onclick="showAddCombatantModal()"' + editDisabled + '>+ Add</button>';
   html += '<button class="btn-sm btn-danger" onclick="endCombat()"' + editDisabled + '>End Combat</button>';
   html += '</div>';
+  return html;
+}
 
-  // ── Combat Info Header ──
-  var combatEnc = state.encounters.find(function(e) { return e.id === combat.encounterId; });
-  var combatParty = state.parties.find(function(p) { return p.id === combat.partyId; });
+function renderCombatInfo(combat) {
+  let html = '';
+  const combatEnc = state.encounters.find(function(e) { return e.id === combat.encounterId; });
+  const combatParty = state.parties.find(function(p) { return p.id === combat.partyId; });
   if (combatEnc || combatParty) {
     html += '<div class="combat-info">';
     if (combatParty && combatParty.name) {
@@ -3620,9 +3661,114 @@ function renderActiveCombat(el) {
     }
     html += '</div>';
   }
+  return html;
+}
+
+function renderCombatantRow(c, idx, template, combat) {
+  let html = '';
+  const isCurrent = idx === combat.turnIndex;
+  const isDead = c.dead || false;
+
+  let rowClasses = 'combatant-row';
+  if (isCurrent) rowClasses += ' current-turn';
+  if (isDead) rowClasses += ' is-dead';
+  // Dim non-selectable rows in edit mode
+  const editDimmed = editState.mode && !editState.visible && c.type === 'monster' && editState.lockedTemplateId !== null && c.templateId !== editState.lockedTemplateId;
+
+  html += '<div class="' + rowClasses + '"' + (editDimmed ? ' style="opacity:0.35"' : '') + ' onclick="toggleCombatantDetail(' + idx + ')">';
+
+  // Init (or checkbox in edit mode)
+  if (editState.mode && !editState.visible && c.type === 'monster') {
+    const canSelect = editState.lockedTemplateId === null || c.templateId === editState.lockedTemplateId;
+    const isChecked = editState.selected.indexOf(c.id) >= 0;
+    html += '<span class="init-val"><input type="checkbox" class="edit-checkbox"' + (isChecked ? ' checked' : '') + (!canSelect && !isChecked ? ' disabled' : '') + ' onclick="event.stopPropagation();toggleEditSelect(\'' + c.id + '\',\'' + c.templateId + '\')" /></span>';
+  } else {
+    html += '<span class="init-val">' + (c.init !== null && c.init !== undefined ? Math.floor(c.init) : '-') + '</span>';
+  }
+
+  // Name + badges
+  const hasOvr = c.type === 'monster' && c.overrides && Object.keys(c.overrides).length > 0;
+  html += '<span class="combatant-name type-' + c.type + (hasOvr ? ' has-overrides' : '') + '">' + esc(c.name);
+  if (hasOvr) {
+    html += '<span class="override-badge" title="Modified">\u2726</span>';
+  }
+  if (c.type === 'monster' && template) {
+    if (template.legendaryActionBudget > 0) {
+      const laRemaining = c.legendaryActionsRemaining !== undefined ? c.legendaryActionsRemaining : template.legendaryActionBudget;
+      html += '<span class="la-badge">LA:' + laRemaining + '/' + template.legendaryActionBudget + '</span>';
+    }
+    if (template.legendaryResistances > 0) {
+      const lrRemaining = c.legendaryResistancesRemaining !== undefined ? c.legendaryResistancesRemaining : template.legendaryResistances;
+      html += '<span class="lr-badge">LR:' + lrRemaining + '/' + template.legendaryResistances + '</span>';
+    }
+  }
+  // Condition chips (all combatant types)
+  if (c.conditions && c.conditions.length > 0) {
+    c.conditions.forEach(cond => {
+      html += '<span class="condition-chip' + (cond.durationType === 'save' ? ' save-based' : '') + '">' + esc(cond.name);
+      if (cond.durationType === 'rounds' && cond.duration) html += ' (' + cond.duration + ')';
+      html += '</span>';
+    });
+  }
+  if (c.concentration) {
+    html += '<span class="concentration-chip">Conc: ' + esc(c.concentration) + '</span>';
+  }
+  // Turn-start notification badge (visible when panel closed)
+  if (isCurrent && c.rollLog && c.rollLog.length > 0 && !c._expanded) {
+    html += '<span class="turn-notify">' + c.rollLog.length + ' alert' + (c.rollLog.length !== 1 ? 's' : '') + '</span>';
+  }
+  html += '</span>';
+
+  // AC
+  if (c.type === 'monster' && template) {
+    html += '<span class="ac-val">' + ovh(c, 'ac', '' + template.ac) + '</span>';
+  } else if (c.type === 'player' && c.ac) {
+    html += '<span class="ac-val">' + c.ac + '</span>';
+  } else if (c.type === 'adhoc' && c.ac) {
+    html += '<span class="ac-val">' + c.ac + '</span>';
+  } else {
+    html += '<span class="ac-val"></span>';
+  }
+
+  // HP bar (monsters and ad-hoc with HP)
+  if ((c.type === 'monster' && template) || (c.type === 'adhoc' && c.hpMax)) {
+    const hp = getCombatantHp(c, template);
+    html += renderHpBar(hp.curHp, hp.maxHp, hp.tempHp);
+  } else {
+    html += '<span></span>';
+  }
+
+  // Reaction indicator
+  if (c.type !== 'adhoc') {
+    const rUsed = c.reactionUsed || false;
+    html += '<span class="reaction-indicator ' + (rUsed ? 'used' : 'available') + '" onclick="event.stopPropagation();toggleReaction(' + idx + ')" title="' + (rUsed ? 'Reaction used' : 'Reaction available') + '">R</span>';
+  } else {
+    html += '<span></span>';
+  }
+
+  html += '</div>';
+
+  // ── Detail Panel ──
+  const expanded = c._expanded || false;
+  html += '<div class="combatant-detail' + (expanded ? ' expanded' : '') + '" id="detail-' + idx + '">';
+  html += renderCombatantDetail(c, idx, template);
+  html += '</div>';
+
+  return html;
+}
+
+function renderActiveCombat(el) {
+  const combat = getActiveCombat();
+  let html = '';
+
+  // ── Combat Bar ──
+  html += renderCombatBar(combat);
+
+  // ── Combat Info Header ──
+  html += renderCombatInfo(combat);
 
   // ── Edit Form or Combatant Rows ──
-  if (editMode && editFormVisible) {
+  if (editState.mode && editState.visible) {
     html += '<div id="editOverrideContainer"></div>';
     el.innerHTML = html;
     renderEditOverrideForm();
@@ -3640,130 +3786,252 @@ function renderActiveCombat(el) {
 
   // ── Combatant Rows ──
   combat.combatants.forEach((c, idx) => {
-    const isCurrent = idx === combat.turnIndex;
-    const isDead = c.dead || false;
     const template = getTemplate(c);
-
-    let rowClasses = 'combatant-row';
-    if (isCurrent) rowClasses += ' current-turn';
-    if (isDead) rowClasses += ' is-dead';
-    // Dim non-selectable rows in edit mode
-    var editDimmed = editMode && !editFormVisible && c.type === 'monster' && editLockedTemplateId !== null && c.templateId !== editLockedTemplateId;
-
-    html += '<div class="' + rowClasses + '"' + (editDimmed ? ' style="opacity:0.35"' : '') + ' onclick="toggleCombatantDetail(' + idx + ')">';
-
-    // Init (or checkbox in edit mode)
-    if (editMode && !editFormVisible && c.type === 'monster') {
-      var canSelect = editLockedTemplateId === null || c.templateId === editLockedTemplateId;
-      var isChecked = editSelected.indexOf(c.id) >= 0;
-      html += '<span class="init-val"><input type="checkbox" class="edit-checkbox"' + (isChecked ? ' checked' : '') + (!canSelect && !isChecked ? ' disabled' : '') + ' onclick="event.stopPropagation();toggleEditSelect(\'' + c.id + '\',\'' + c.templateId + '\')" /></span>';
-    } else {
-      html += '<span class="init-val">' + (c.init !== null && c.init !== undefined ? Math.floor(c.init) : '-') + '</span>';
-    }
-
-    // Name + badges
-    var hasOvr = c.type === 'monster' && c.overrides && Object.keys(c.overrides).length > 0;
-    html += '<span class="combatant-name type-' + c.type + (hasOvr ? ' has-overrides' : '') + '">' + esc(c.name);
-    if (hasOvr) {
-      html += '<span class="override-badge" title="Modified">\u2726</span>';
-    }
-    if (c.type === 'monster' && template) {
-      if (template.legendaryActionBudget > 0) {
-        const laRemaining = c.legendaryActionsRemaining !== undefined ? c.legendaryActionsRemaining : template.legendaryActionBudget;
-        html += '<span class="la-badge">LA:' + laRemaining + '/' + template.legendaryActionBudget + '</span>';
-      }
-      if (template.legendaryResistances > 0) {
-        const lrRemaining = c.legendaryResistancesRemaining !== undefined ? c.legendaryResistancesRemaining : template.legendaryResistances;
-        html += '<span class="lr-badge">LR:' + lrRemaining + '/' + template.legendaryResistances + '</span>';
-      }
-    }
-    // Condition chips (all combatant types)
-    if (c.conditions && c.conditions.length > 0) {
-      c.conditions.forEach(cond => {
-        html += '<span class="condition-chip' + (cond.durationType === 'save' ? ' save-based' : '') + '">' + esc(cond.name);
-        if (cond.durationType === 'rounds' && cond.duration) html += ' (' + cond.duration + ')';
-        html += '</span>';
-      });
-    }
-    if (c.concentration) {
-      html += '<span class="concentration-chip">Conc: ' + esc(c.concentration) + '</span>';
-    }
-    // Turn-start notification badge (visible when panel closed)
-    if (isCurrent && c.rollLog && c.rollLog.length > 0 && !c._expanded) {
-      html += '<span class="turn-notify">' + c.rollLog.length + ' alert' + (c.rollLog.length !== 1 ? 's' : '') + '</span>';
-    }
-    html += '</span>';
-
-    // AC
-    if (c.type === 'monster' && template) {
-      html += '<span class="ac-val">' + ovh(c, 'ac', '' + template.ac) + '</span>';
-    } else if (c.type === 'player' && c.ac) {
-      html += '<span class="ac-val">' + c.ac + '</span>';
-    } else if (c.type === 'adhoc' && c.ac) {
-      html += '<span class="ac-val">' + c.ac + '</span>';
-    } else {
-      html += '<span class="ac-val"></span>';
-    }
-
-    // HP bar (monsters and ad-hoc with HP)
-    if (c.type === 'monster' && template) {
-      const maxHp = template.hpMax;
-      const curHp = c.currentHp !== undefined ? c.currentHp : maxHp;
-      const tempHp = c.tempHp || 0;
-      const pct = maxHp > 0 ? Math.max(0, Math.min(100, Math.round((curHp / maxHp) * 100))) : 0;
-      const hpClass = pct > 50 ? 'hp-high' : pct > 25 ? 'hp-mid' : 'hp-low';
-      html += '<div class="hp-bar-container">';
-      html += '<div class="hp-bar-fill ' + hpClass + '" style="width:' + pct + '%"></div>';
-      html += '<span class="hp-bar-text">' + curHp + (tempHp > 0 ? '+' + tempHp : '') + '/' + maxHp + '</span>';
-      html += '</div>';
-    } else if (c.type === 'adhoc' && c.hpMax) {
-      const maxHp = c.hpMax;
-      const curHp = c.currentHp !== undefined ? c.currentHp : maxHp;
-      const tempHp = c.tempHp || 0;
-      const pct = maxHp > 0 ? Math.max(0, Math.min(100, Math.round((curHp / maxHp) * 100))) : 0;
-      const hpClass = pct > 50 ? 'hp-high' : pct > 25 ? 'hp-mid' : 'hp-low';
-      html += '<div class="hp-bar-container">';
-      html += '<div class="hp-bar-fill ' + hpClass + '" style="width:' + pct + '%"></div>';
-      html += '<span class="hp-bar-text">' + curHp + (tempHp > 0 ? '+' + tempHp : '') + '/' + maxHp + '</span>';
-      html += '</div>';
-    } else {
-      html += '<span></span>';
-    }
-
-    // Reaction indicator
-    if (c.type !== 'adhoc') {
-      const rUsed = c.reactionUsed || false;
-      html += '<span class="reaction-indicator ' + (rUsed ? 'used' : 'available') + '" onclick="event.stopPropagation();toggleReaction(' + idx + ')" title="' + (rUsed ? 'Reaction used' : 'Reaction available') + '">R</span>';
-    } else {
-      html += '<span></span>';
-    }
-
-    html += '</div>';
-
-    // ── Detail Panel ──
-    const expanded = c._expanded || false;
-    html += '<div class="combatant-detail' + (expanded ? ' expanded' : '') + '" id="detail-' + idx + '">';
-    html += renderCombatantDetail(c, idx, template);
-    html += '</div>';
+    html += renderCombatantRow(c, idx, template, combat);
   });
 
   el.innerHTML = html;
 }
 
-function renderCombatantDetail(c, idx, template) {
-  let html = '<div class="detail-grid">';
+function renderMonsterDetail(c, idx, template) {
+  let html = '';
 
-  if (c.type === 'monster' && template) {
-    // Left column: HP + Features + Attacks + Roll Log
-    html += '<div>';
+  // Left column: HP + Features + Attacks + Roll Log
+  html += '<div>';
 
-    // HP Controls
-    const maxHp = template.hpMax;
+  // HP Controls
+  const maxHp = template.hpMax;
+  const curHp = c.currentHp !== undefined ? c.currentHp : maxHp;
+  const tempHp = c.tempHp || 0;
+  html += '<div class="detail-section-title">Hit Points</div>';
+  html += '<div class="text-mono" style="margin-bottom:0.3rem">';
+  html += '<strong>' + curHp + '</strong> / ' + ovh(c, 'hpMax', '' + maxHp);
+  if (tempHp > 0) html += ' <span style="color:var(--accent)">(+' + tempHp + ' temp)</span>';
+  html += '</div>';
+  html += '<div class="hp-controls">';
+  html += '<input type="number" id="hpInput-' + idx + '" placeholder="0" min="0" onclick="event.stopPropagation()">';
+  html += '<button class="btn-sm btn-danger" onclick="event.stopPropagation();applyDamage(' + idx + ')">Dmg</button>';
+  html += '<button class="btn-sm btn-success" onclick="event.stopPropagation();applyHeal(' + idx + ')">Heal</button>';
+  html += '<button class="btn-sm btn-warning" onclick="event.stopPropagation();applyTempHp(' + idx + ')">THP</button>';
+  html += '</div>';
+
+  // Multiattack
+  if (template.multiattack) {
+    html += '<div class="multiattack-box">' + ovh(c, 'multiattack', 'Multiattack: ' + esc(template.multiattack)) + '</div>';
+  }
+
+  // Features (moved from right column)
+  if (template.features.length > 0) {
+    html += '<div class="detail-section-title" style="margin-top:0.5rem">Features</div>';
+    template.features.forEach((f, fIdx) => {
+      html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
+      html += '<div style="font-size:0.75rem;display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">';
+      html += '<strong>' + ovh(c, 'features.' + fIdx + '.name', esc(f.name)) + '</strong>';
+      if (f.recharge) html += '<span style="color:var(--warning)">' + ovh(c, 'features.' + fIdx + '.recharge', '(Recharge ' + esc(f.recharge) + ')') + '</span>';
+      if (f.usesMax) {
+        const remaining = c.featureUses && c.featureUses[fIdx] !== undefined ? c.featureUses[fIdx] : f.usesMax;
+        html += '<span style="font-family:var(--mono);font-size:0.72rem;color:' + (remaining === 0 ? 'var(--error)' : 'var(--text-dim)') + '">Uses: ' + remaining + '/' + f.usesMax + '</span>';
+        html += '<button class="btn-sm btn-accent"' + (remaining <= 0 ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();useFeature(' + idx + ',' + fIdx + ')"' + (remaining <= 0 ? ' disabled' : '') + '>Use</button>';
+        html += '<button class="btn-sm btn-success"' + (remaining >= f.usesMax ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();restoreFeature(' + idx + ',' + fIdx + ')"' + (remaining >= f.usesMax ? ' disabled' : '') + '>Restore</button>';
+      }
+      if (f.recharge && f.usesMax) {
+        const remaining = c.featureUses && c.featureUses[fIdx] !== undefined ? c.featureUses[fIdx] : f.usesMax;
+        if (remaining === 0) {
+          html += '<button class="btn-sm btn-warning" onclick="event.stopPropagation();rollRecharge(' + idx + ',' + fIdx + ')">Roll Recharge</button>';
+        }
+      }
+      html += '</div>';
+      if (f.desc) {
+        let fDescHtml = renderDiceText(esc(f.desc), idx, 'feature', fIdx);
+        if (isFieldOverridden(c, 'features.' + fIdx + '.desc')) fDescHtml = '<span class="override-highlight">' + fDescHtml + '</span>';
+        html += '<div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem">' + fDescHtml + '</div>';
+      }
+      html += '</div>';
+    });
+  }
+
+  // Attacks
+  if (template.attacks.length > 0) {
+    html += '<div class="detail-section-title" style="margin-top:0.5rem">Attacks</div>';
+    template.attacks.forEach((atk, atkIdx) => {
+      html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
+      html += '<div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">';
+      html += '<strong style="font-size:0.8rem">' + ovh(c, 'attacks.' + atkIdx + '.name', esc(atk.name)) + '</strong>';
+      html += '<span style="font-family:var(--mono);font-size:0.72rem;color:var(--text-dim)">';
+      html += ovh(c, 'attacks.' + atkIdx + '.bonus', (atk.bonus >= 0 ? '+' : '') + atk.bonus) + ' to hit';
+      if (atk.note) html += ' &middot; ' + ovh(c, 'attacks.' + atkIdx + '.note', esc(atk.note));
+      html += '</span>';
+      html += '<div class="spacer"></div>';
+      html += '<button class="btn-sm" onclick="showRollPopup(event,\'rollAttack\',' + idx + ',' + atkIdx + ')">Atk</button>';
+      if (atk.damages && atk.damages.length > 0) {
+        html += '<button class="btn-sm" onclick="showDmgPopup(event,' + idx + ',' + atkIdx + ')">Dmg</button>';
+      }
+      html += '</div>';
+      // Damage summary
+      if (atk.damages && atk.damages.length > 0) {
+        html += '<div class="text-dim-sm" style="margin-top:0.15rem">';
+        html += atk.damages.map(function(dm, dmIdx) { return ovh(c, 'attacks.' + atkIdx + '.damages.' + dmIdx + '.dice', esc(dm.dice)) + ' ' + ovh(c, 'attacks.' + atkIdx + '.damages.' + dmIdx + '.type', esc(dm.type)) + (dm.note ? ' (' + ovh(c, 'attacks.' + atkIdx + '.damages.' + dmIdx + '.note', esc(dm.note)) + ')' : ''); }).join(' + ');
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+  }
+
+  // Roll log
+  html += '<div id="rollLog-' + idx + '">';
+  if (c.rollLog && c.rollLog.length > 0) {
+    html += '<div class="roll-log">';
+    c.rollLog.forEach(entry => {
+      html += '<div class="roll-log-entry ' + (entry.cssClass || '') + '">';
+      html += '<strong>' + entry.label + ':</strong> ' + entry.text;
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+
+  html += '</div>';
+
+  // Right column: Reference + Roll
+  html += '<div>';
+
+  // Speed & Senses
+  html += '<div class="text-dim-sm" style="margin-bottom:0.4rem">';
+  if (template.speed) html += 'Speed: ' + ovh(c, 'speed', esc(template.speed)) + '<br>';
+  if (template.senses) html += 'Senses: ' + ovh(c, 'senses', esc(template.senses)) + '<br>';
+  html += '</div>';
+
+  // Passives
+  html += '<div class="passive-row">';
+  html += '<span><span class="passive-label">PP </span>' + ovh(c, 'passivePerception', '' + getPassivePerception(template)) + '</span>';
+  html += '<span><span class="passive-label">PI </span>' + calcPassiveInvestigation(template) + '</span>';
+  html += '<span><span class="passive-label">PIn </span>' + calcPassiveInsight(template) + '</span>';
+  html += '</div>';
+
+  // Checks & Saves grid
+  html += '<div class="detail-section-title">Checks & Saves</div>';
+  for (let attrRow = 0; attrRow < 2; attrRow++) {
+    html += '<div class="attr-grid">';
+    for (let attrCol = 0; attrCol < 3; attrCol++) {
+      const ab = ABILITIES[attrRow * 3 + attrCol];
+      const score = template.abilities[ab];
+      const mod = abilityMod(score);
+      const st = template.savingThrows && template.savingThrows.find(function(s) { return s.ability === ab; });
+      const saveMod = st ? st.bonus : mod;
+      const saveProfClass = st ? ' proficient' : '';
+
+      html += '<div class="attr-cell">';
+      html += '<span class="attr-label">' + ab.toUpperCase() + '</span>';
+      // Check button: score (+mod)
+      html += '<button class="attr-btn" onclick="showRollPopup(event,\'rollAbilityCheck\',' + idx + ',\'' + ab + '\')">';
+      html += ovh(c, 'abilities.' + ab, score + ' (' + modStr(score) + ')');
+      html += '</button>';
+      // Save sub-label + button
+      html += '<span class="attr-sub">save</span>';
+      let saveDisplay = (saveMod >= 0 ? '+' : '') + saveMod;
+      const rawT = getRawTemplate(c);
+      if (rawT && isFieldOverridden(c, 'savingThrows')) {
+        const rawSt = rawT.savingThrows && rawT.savingThrows.find(function(s) { return s.ability === ab; });
+        const rawSaveMod = rawSt ? rawSt.bonus : abilityMod(rawT.abilities[ab]);
+        if (saveMod !== rawSaveMod) saveDisplay = '<span class="override-highlight">' + saveDisplay + '</span>';
+      }
+      html += '<button class="attr-btn save-btn' + saveProfClass + '" onclick="showRollPopup(event,\'rollSavingThrow\',' + idx + ',\'' + ab + '\')">';
+      html += saveDisplay;
+      html += '</button>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  // Skills grid
+  html += '<div class="detail-section-title" style="margin-top:0.75rem">Skills</div>';
+  html += '<div class="skill-grid">';
+  SKILLS.forEach(function(skillName, skillIdx) {
+    const skillAbility = SKILL_ABILITY_MAP[skillName];
+    const skill = template.skills.find(function(s) { return s.name === skillName; });
+    const skillMod = skill ? skill.bonus : abilityMod(template.abilities[skillAbility]);
+    const skillProfClass = skill ? ' proficient' : '';
+    let skillDisplay = (skillMod >= 0 ? '+' : '') + skillMod;
+    if (isFieldOverridden(c, 'skills')) {
+      const rawT2 = getRawTemplate(c);
+      if (rawT2) {
+        const rawSkill = rawT2.skills.find(function(s) { return s.name === skillName; });
+        const rawSkillMod = rawSkill ? rawSkill.bonus : abilityMod(rawT2.abilities[skillAbility]);
+        if (skillMod !== rawSkillMod) skillDisplay = '<span class="override-highlight">' + skillDisplay + '</span>';
+      }
+    }
+
+    html += '<div class="skill-cell">';
+    html += '<span class="skill-label">' + esc(skillName) + '</span>';
+    html += '<button class="attr-btn' + skillProfClass + '" onclick="showRollPopup(event,\'rollSkillCheck\',' + idx + ',' + skillIdx + ')">';
+    html += skillDisplay;
+    html += '</button>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Legendary Actions
+  if (template.legendaryActionBudget > 0 && template.legendaryActions.length > 0) {
+    const laRemaining = c.legendaryActionsRemaining !== undefined ? c.legendaryActionsRemaining : template.legendaryActionBudget;
+    html += '<div class="detail-section-title" style="margin-top:0.5rem">Legendary Actions <span style="font-family:var(--mono);color:var(--warning)">' + laRemaining + '/' + template.legendaryActionBudget + '</span>';
+    html += ' <button class="btn-sm btn-success" style="font-size:0.65rem;padding:0.05rem 0.3rem' + (laRemaining >= template.legendaryActionBudget ? ';opacity:0.4' : '') + '" onclick="event.stopPropagation();restoreLegendaryAction(' + idx + ')"' + (laRemaining >= template.legendaryActionBudget ? ' disabled' : '') + '>Restore LA</button>';
+    html += '</div>';
+    template.legendaryActions.forEach((la, laIdx) => {
+      const canUse = laRemaining >= la.cost;
+      html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
+      html += '<div style="font-size:0.75rem;display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">';
+      html += '<strong>' + ovh(c, 'legendaryActions.' + laIdx + '.name', esc(la.name)) + '</strong>';
+      html += '<span style="font-family:var(--mono);font-size:0.68rem;color:var(--text-dim)">' + ovh(c, 'legendaryActions.' + laIdx + '.cost', 'Cost: ' + la.cost) + '</span>';
+      html += '<button class="btn-sm btn-accent"' + (!canUse ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();useLegendaryAction(' + idx + ',' + laIdx + ')"' + (!canUse ? ' disabled' : '') + '>Use</button>';
+      html += '</div>';
+      if (la.desc) {
+        let laDescHtml = renderDiceText(esc(la.desc), idx, 'la', laIdx);
+        if (isFieldOverridden(c, 'legendaryActions.' + laIdx + '.desc')) laDescHtml = '<span class="override-highlight">' + laDescHtml + '</span>';
+        html += '<div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem">' + laDescHtml + '</div>';
+      }
+      html += '</div>';
+    });
+  }
+
+  // Legendary Resistances
+  if (template.legendaryResistances > 0) {
+    const lrRemaining = c.legendaryResistancesRemaining !== undefined ? c.legendaryResistancesRemaining : template.legendaryResistances;
+    html += '<div class="detail-section-title" style="margin-top:0.5rem">Legendary Resistances <span style="font-family:var(--mono);color:' + (lrRemaining === 0 ? 'var(--error)' : 'var(--text-dim)') + '">' + lrRemaining + '/' + template.legendaryResistances + '</span></div>';
+    html += '<div style="display:flex;gap:0.3rem">';
+    html += '<button class="btn-sm btn-accent"' + (lrRemaining <= 0 ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();useLegendaryResistance(' + idx + ')"' + (lrRemaining <= 0 ? ' disabled' : '') + '>Use LR</button>';
+    html += '<button class="btn-sm btn-success"' + (lrRemaining >= template.legendaryResistances ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();restoreLegendaryResistance(' + idx + ')"' + (lrRemaining >= template.legendaryResistances ? ' disabled' : '') + '>Restore LR</button>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+
+  return html;
+}
+
+function renderPlayerDetail(c, idx) {
+  let html = '';
+  html += '<div><div class="detail-section-title">Player</div>';
+  html += '<div class="flex-row" style="margin-bottom:0.3rem">';
+  html += '<label style="font-size:0.75rem;color:var(--text-muted)">AC</label>';
+  html += '<input type="number" value="' + (c.ac || '') + '" style="width:60px;padding:0.25rem 0.4rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:0.78rem;text-align:center" onchange="event.stopPropagation();setPlayerAc(' + idx + ',+this.value)" onclick="event.stopPropagation()" placeholder="-">';
+  html += '</div>';
+  html += '<div class="text-muted-sm">Conditions and details tracked by the DM.</div>';
+  html += '</div><div></div>';
+  return html;
+}
+
+function renderAdhocDetail(c, idx) {
+  let html = '';
+  html += '<div><div class="detail-section-title">Ad-hoc Combatant</div>';
+  html += '<div class="detail-label">Lair action, environment effect, or custom entry.</div>';
+  // HP controls (if hpMax set)
+  if (c.hpMax) {
+    const maxHp = c.hpMax;
     const curHp = c.currentHp !== undefined ? c.currentHp : maxHp;
     const tempHp = c.tempHp || 0;
     html += '<div class="detail-section-title">Hit Points</div>';
-    html += '<div style="font-family:var(--mono);font-size:0.82rem;margin-bottom:0.3rem">';
-    html += '<strong>' + curHp + '</strong> / ' + ovh(c, 'hpMax', '' + maxHp);
+    html += '<div class="text-mono" style="margin-bottom:0.3rem">';
+    html += '<strong>' + curHp + '</strong> / ' + maxHp;
     if (tempHp > 0) html += ' <span style="color:var(--accent)">(+' + tempHp + ' temp)</span>';
     html += '</div>';
     html += '<div class="hp-controls">';
@@ -3772,241 +4040,36 @@ function renderCombatantDetail(c, idx, template) {
     html += '<button class="btn-sm btn-success" onclick="event.stopPropagation();applyHeal(' + idx + ')">Heal</button>';
     html += '<button class="btn-sm btn-warning" onclick="event.stopPropagation();applyTempHp(' + idx + ')">THP</button>';
     html += '</div>';
-
-    // Multiattack
-    if (template.multiattack) {
-      html += '<div class="multiattack-box">' + ovh(c, 'multiattack', 'Multiattack: ' + esc(template.multiattack)) + '</div>';
-    }
-
-    // Features (moved from right column)
-    if (template.features.length > 0) {
-      html += '<div class="detail-section-title" style="margin-top:0.5rem">Features</div>';
-      template.features.forEach((f, fIdx) => {
-        html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
-        html += '<div style="font-size:0.75rem;display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">';
-        html += '<strong>' + ovh(c, 'features.' + fIdx + '.name', esc(f.name)) + '</strong>';
-        if (f.recharge) html += '<span style="color:var(--warning)">' + ovh(c, 'features.' + fIdx + '.recharge', '(Recharge ' + esc(f.recharge) + ')') + '</span>';
-        if (f.usesMax) {
-          const remaining = c.featureUses && c.featureUses[fIdx] !== undefined ? c.featureUses[fIdx] : f.usesMax;
-          html += '<span style="font-family:var(--mono);font-size:0.72rem;color:' + (remaining === 0 ? 'var(--error)' : 'var(--text-dim)') + '">Uses: ' + remaining + '/' + f.usesMax + '</span>';
-          html += '<button class="btn-sm btn-accent"' + (remaining <= 0 ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();useFeature(' + idx + ',' + fIdx + ')"' + (remaining <= 0 ? ' disabled' : '') + '>Use</button>';
-          html += '<button class="btn-sm btn-success"' + (remaining >= f.usesMax ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();restoreFeature(' + idx + ',' + fIdx + ')"' + (remaining >= f.usesMax ? ' disabled' : '') + '>Restore</button>';
-        }
-        if (f.recharge && f.usesMax) {
-          const remaining = c.featureUses && c.featureUses[fIdx] !== undefined ? c.featureUses[fIdx] : f.usesMax;
-          if (remaining === 0) {
-            html += '<button class="btn-sm btn-warning" onclick="event.stopPropagation();rollRecharge(' + idx + ',' + fIdx + ')">Roll Recharge</button>';
-          }
-        }
-        html += '</div>';
-        if (f.desc) {
-          var fDescHtml = renderDiceText(esc(f.desc), idx, 'feature', fIdx);
-          if (isFieldOverridden(c, 'features.' + fIdx + '.desc')) fDescHtml = '<span class="override-highlight">' + fDescHtml + '</span>';
-          html += '<div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem">' + fDescHtml + '</div>';
-        }
-        html += '</div>';
-      });
-    }
-
-    // Attacks
-    if (template.attacks.length > 0) {
-      html += '<div class="detail-section-title" style="margin-top:0.5rem">Attacks</div>';
-      template.attacks.forEach((atk, atkIdx) => {
-        html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
-        html += '<div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">';
-        html += '<strong style="font-size:0.8rem">' + ovh(c, 'attacks.' + atkIdx + '.name', esc(atk.name)) + '</strong>';
-        html += '<span style="font-family:var(--mono);font-size:0.72rem;color:var(--text-dim)">';
-        html += ovh(c, 'attacks.' + atkIdx + '.bonus', (atk.bonus >= 0 ? '+' : '') + atk.bonus) + ' to hit';
-        if (atk.note) html += ' &middot; ' + ovh(c, 'attacks.' + atkIdx + '.note', esc(atk.note));
-        html += '</span>';
-        html += '<div class="spacer"></div>';
-        html += '<button class="btn-sm" onclick="showRollPopup(event,\'rollAttack\',' + idx + ',' + atkIdx + ')">Atk</button>';
-        if (atk.damages && atk.damages.length > 0) {
-          html += '<button class="btn-sm" onclick="showDmgPopup(event,' + idx + ',' + atkIdx + ')">Dmg</button>';
-        }
-        html += '</div>';
-        // Damage summary
-        if (atk.damages && atk.damages.length > 0) {
-          html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-top:0.15rem">';
-          html += atk.damages.map(function(dm, dmIdx) { return ovh(c, 'attacks.' + atkIdx + '.damages.' + dmIdx + '.dice', esc(dm.dice)) + ' ' + ovh(c, 'attacks.' + atkIdx + '.damages.' + dmIdx + '.type', esc(dm.type)) + (dm.note ? ' (' + ovh(c, 'attacks.' + atkIdx + '.damages.' + dmIdx + '.note', esc(dm.note)) + ')' : ''); }).join(' + ');
-          html += '</div>';
-        }
-        html += '</div>';
-      });
-    }
-
-    // Roll log
-    html += '<div id="rollLog-' + idx + '">';
-    if (c.rollLog && c.rollLog.length > 0) {
-      html += '<div class="roll-log">';
-      c.rollLog.forEach(entry => {
-        html += '<div class="roll-log-entry ' + (entry.cssClass || '') + '">';
-        html += '<strong>' + entry.label + ':</strong> ' + entry.text;
-        html += '</div>';
-      });
-      html += '</div>';
-    }
-    html += '</div>';
-
-    html += '</div>';
-
-    // Right column: Reference + Roll
-    html += '<div>';
-
-    // Speed & Senses
-    html += '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:0.4rem">';
-    if (template.speed) html += 'Speed: ' + ovh(c, 'speed', esc(template.speed)) + '<br>';
-    if (template.senses) html += 'Senses: ' + ovh(c, 'senses', esc(template.senses)) + '<br>';
-    html += '</div>';
-
-    // Passives
-    html += '<div class="passive-row">';
-    html += '<span><span class="passive-label">PP </span>' + ovh(c, 'passivePerception', '' + getPassivePerception(template)) + '</span>';
-    html += '<span><span class="passive-label">PI </span>' + calcPassiveInvestigation(template) + '</span>';
-    html += '<span><span class="passive-label">PIn </span>' + calcPassiveInsight(template) + '</span>';
-    html += '</div>';
-
-    // Checks & Saves grid
-    html += '<div class="detail-section-title">Checks & Saves</div>';
-    for (var attrRow = 0; attrRow < 2; attrRow++) {
-      html += '<div class="attr-grid">';
-      for (var attrCol = 0; attrCol < 3; attrCol++) {
-        var ab = ABILITIES[attrRow * 3 + attrCol];
-        var score = template.abilities[ab];
-        var mod = abilityMod(score);
-        var st = template.savingThrows && template.savingThrows.find(function(s) { return s.ability === ab; });
-        var saveMod = st ? st.bonus : mod;
-        var saveProfClass = st ? ' proficient' : '';
-
-        html += '<div class="attr-cell">';
-        html += '<span class="attr-label">' + ab.toUpperCase() + '</span>';
-        // Check button: score (+mod)
-        html += '<button class="attr-btn" onclick="showRollPopup(event,\'rollAbilityCheck\',' + idx + ',\'' + ab + '\')">';
-        html += ovh(c, 'abilities.' + ab, score + ' (' + modStr(score) + ')');
-        html += '</button>';
-        // Save sub-label + button
-        html += '<span class="attr-sub">save</span>';
-        var saveDisplay = (saveMod >= 0 ? '+' : '') + saveMod;
-        var rawT = getRawTemplate(c);
-        if (rawT && isFieldOverridden(c, 'savingThrows')) {
-          var rawSt = rawT.savingThrows && rawT.savingThrows.find(function(s) { return s.ability === ab; });
-          var rawSaveMod = rawSt ? rawSt.bonus : abilityMod(rawT.abilities[ab]);
-          if (saveMod !== rawSaveMod) saveDisplay = '<span class="override-highlight">' + saveDisplay + '</span>';
-        }
-        html += '<button class="attr-btn save-btn' + saveProfClass + '" onclick="showRollPopup(event,\'rollSavingThrow\',' + idx + ',\'' + ab + '\')">';
-        html += saveDisplay;
-        html += '</button>';
-        html += '</div>';
-      }
-      html += '</div>';
-    }
-
-    // Skills grid
-    html += '<div class="detail-section-title" style="margin-top:0.75rem">Skills</div>';
-    html += '<div class="skill-grid">';
-    SKILLS.forEach(function(skillName, skillIdx) {
-      var skillAbility = SKILL_ABILITY_MAP[skillName];
-      var skill = template.skills.find(function(s) { return s.name === skillName; });
-      var skillMod = skill ? skill.bonus : abilityMod(template.abilities[skillAbility]);
-      var skillProfClass = skill ? ' proficient' : '';
-      var skillDisplay = (skillMod >= 0 ? '+' : '') + skillMod;
-      if (isFieldOverridden(c, 'skills')) {
-        var rawT2 = getRawTemplate(c);
-        if (rawT2) {
-          var rawSkill = rawT2.skills.find(function(s) { return s.name === skillName; });
-          var rawSkillMod = rawSkill ? rawSkill.bonus : abilityMod(rawT2.abilities[skillAbility]);
-          if (skillMod !== rawSkillMod) skillDisplay = '<span class="override-highlight">' + skillDisplay + '</span>';
-        }
-      }
-
-      html += '<div class="skill-cell">';
-      html += '<span class="skill-label">' + esc(skillName) + '</span>';
-      html += '<button class="attr-btn' + skillProfClass + '" onclick="showRollPopup(event,\'rollSkillCheck\',' + idx + ',' + skillIdx + ')">';
-      html += skillDisplay;
-      html += '</button>';
+  }
+  // AC display (if set)
+  if (c.ac) {
+    html += '<div class="detail-label"><strong>AC</strong> ' + c.ac + '</div>';
+  }
+  // Roll log
+  html += '<div id="rollLog-' + idx + '">';
+  if (c.rollLog && c.rollLog.length > 0) {
+    html += '<div class="roll-log">';
+    c.rollLog.forEach(function(entry) {
+      html += '<div class="roll-log-entry ' + (entry.cssClass || '') + '">';
+      html += '<strong>' + entry.label + ':</strong> ' + entry.text;
       html += '</div>';
     });
     html += '</div>';
+  }
+  html += '</div>';
+  html += '</div><div></div>';
+  return html;
+}
 
-    // Legendary Actions
-    if (template.legendaryActionBudget > 0 && template.legendaryActions.length > 0) {
-      const laRemaining = c.legendaryActionsRemaining !== undefined ? c.legendaryActionsRemaining : template.legendaryActionBudget;
-      html += '<div class="detail-section-title" style="margin-top:0.5rem">Legendary Actions <span style="font-family:var(--mono);color:var(--warning)">' + laRemaining + '/' + template.legendaryActionBudget + '</span>';
-      html += ' <button class="btn-sm btn-success" style="font-size:0.65rem;padding:0.05rem 0.3rem' + (laRemaining >= template.legendaryActionBudget ? ';opacity:0.4' : '') + '" onclick="event.stopPropagation();restoreLegendaryAction(' + idx + ')"' + (laRemaining >= template.legendaryActionBudget ? ' disabled' : '') + '>Restore LA</button>';
-      html += '</div>';
-      template.legendaryActions.forEach((la, laIdx) => {
-        const canUse = laRemaining >= la.cost;
-        html += '<div style="margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:var(--bg);border-radius:4px">';
-        html += '<div style="font-size:0.75rem;display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">';
-        html += '<strong>' + ovh(c, 'legendaryActions.' + laIdx + '.name', esc(la.name)) + '</strong>';
-        html += '<span style="font-family:var(--mono);font-size:0.68rem;color:var(--text-dim)">' + ovh(c, 'legendaryActions.' + laIdx + '.cost', 'Cost: ' + la.cost) + '</span>';
-        html += '<button class="btn-sm btn-accent"' + (!canUse ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();useLegendaryAction(' + idx + ',' + laIdx + ')"' + (!canUse ? ' disabled' : '') + '>Use</button>';
-        html += '</div>';
-        if (la.desc) {
-          var laDescHtml = renderDiceText(esc(la.desc), idx, 'la', laIdx);
-          if (isFieldOverridden(c, 'legendaryActions.' + laIdx + '.desc')) laDescHtml = '<span class="override-highlight">' + laDescHtml + '</span>';
-          html += '<div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem">' + laDescHtml + '</div>';
-        }
-        html += '</div>';
-      });
-    }
+function renderCombatantDetail(c, idx, template) {
+  let html = '<div class="detail-grid">';
 
-    // Legendary Resistances
-    if (template.legendaryResistances > 0) {
-      const lrRemaining = c.legendaryResistancesRemaining !== undefined ? c.legendaryResistancesRemaining : template.legendaryResistances;
-      html += '<div class="detail-section-title" style="margin-top:0.5rem">Legendary Resistances <span style="font-family:var(--mono);color:' + (lrRemaining === 0 ? 'var(--error)' : 'var(--text-dim)') + '">' + lrRemaining + '/' + template.legendaryResistances + '</span></div>';
-      html += '<div style="display:flex;gap:0.3rem">';
-      html += '<button class="btn-sm btn-accent"' + (lrRemaining <= 0 ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();useLegendaryResistance(' + idx + ')"' + (lrRemaining <= 0 ? ' disabled' : '') + '>Use LR</button>';
-      html += '<button class="btn-sm btn-success"' + (lrRemaining >= template.legendaryResistances ? ' style="opacity:0.4"' : '') + ' onclick="event.stopPropagation();restoreLegendaryResistance(' + idx + ')"' + (lrRemaining >= template.legendaryResistances ? ' disabled' : '') + '>Restore LR</button>';
-      html += '</div>';
-    }
-
-    html += '</div>';
+  if (c.type === 'monster' && template) {
+    html += renderMonsterDetail(c, idx, template);
   } else if (c.type === 'player') {
-    html += '<div><div class="detail-section-title">Player</div>';
-    html += '<div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.3rem">';
-    html += '<label style="font-size:0.75rem;color:var(--text-muted)">AC</label>';
-    html += '<input type="number" value="' + (c.ac || '') + '" style="width:60px;padding:0.25rem 0.4rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:0.78rem;text-align:center" onchange="event.stopPropagation();setPlayerAc(' + idx + ',+this.value)" onclick="event.stopPropagation()" placeholder="-">';
-    html += '</div>';
-    html += '<div style="font-size:0.78rem;color:var(--text-muted)">Conditions and details tracked by the DM.</div>';
-    html += '</div><div></div>';
+    html += renderPlayerDetail(c, idx);
   } else {
-    html += '<div><div class="detail-section-title">Ad-hoc Combatant</div>';
-    html += '<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.3rem">Lair action, environment effect, or custom entry.</div>';
-    // HP controls (if hpMax set)
-    if (c.hpMax) {
-      var maxHp = c.hpMax;
-      var curHp = c.currentHp !== undefined ? c.currentHp : maxHp;
-      var tempHp = c.tempHp || 0;
-      html += '<div class="detail-section-title">Hit Points</div>';
-      html += '<div style="font-family:var(--mono);font-size:0.82rem;margin-bottom:0.3rem">';
-      html += '<strong>' + curHp + '</strong> / ' + maxHp;
-      if (tempHp > 0) html += ' <span style="color:var(--accent)">(+' + tempHp + ' temp)</span>';
-      html += '</div>';
-      html += '<div class="hp-controls">';
-      html += '<input type="number" id="hpInput-' + idx + '" placeholder="0" min="0" onclick="event.stopPropagation()">';
-      html += '<button class="btn-sm btn-danger" onclick="event.stopPropagation();applyDamage(' + idx + ')">Dmg</button>';
-      html += '<button class="btn-sm btn-success" onclick="event.stopPropagation();applyHeal(' + idx + ')">Heal</button>';
-      html += '<button class="btn-sm btn-warning" onclick="event.stopPropagation();applyTempHp(' + idx + ')">THP</button>';
-      html += '</div>';
-    }
-    // AC display (if set)
-    if (c.ac) {
-      html += '<div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.3rem"><strong>AC</strong> ' + c.ac + '</div>';
-    }
-    // Roll log
-    html += '<div id="rollLog-' + idx + '">';
-    if (c.rollLog && c.rollLog.length > 0) {
-      html += '<div class="roll-log">';
-      c.rollLog.forEach(function(entry) {
-        html += '<div class="roll-log-entry ' + (entry.cssClass || '') + '">';
-        html += '<strong>' + entry.label + ':</strong> ' + entry.text;
-        html += '</div>';
-      });
-      html += '</div>';
-    }
-    html += '</div>';
-    html += '</div><div></div>';
+    html += renderAdhocDetail(c, idx);
   }
 
   html += '</div>'; // end detail-grid
@@ -4069,7 +4132,7 @@ function renderCombatantDetail(c, idx, template) {
 
   // ── Concentration (all combatant types) ──
   if (c.type !== 'adhoc') {
-    html += '<div style="display:flex;gap:0.3rem;align-items:center;margin-top:0.4rem">';
+    html += '<div class="flex-row-tight" style="margin-top:0.4rem">';
     html += '<span class="detail-section-title" style="margin-bottom:0">Concentration</span>';
     html += '<input type="text" id="concInput-' + idx + '" value="' + esc(c.concentration || '') + '" placeholder="Spell name..." onclick="event.stopPropagation()" onchange="event.stopPropagation();setConcentration(' + idx + ',this.value)" style="flex:1;padding:0.25rem 0.4rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:0.72rem">';
     if (c.concentration) {
@@ -4080,7 +4143,7 @@ function renderCombatantDetail(c, idx, template) {
 
   // ── Tactics & Descriptions accordion (monsters only) ──
   if (c.type === 'monster' && template && (template.tactics || template.playerDescription || template.dmDescription)) {
-    var descId = 'desc-accordion-' + idx;
+    const descId = 'desc-accordion-' + idx;
     html += '<div class="detail-accordion-toggle" onclick="event.stopPropagation();toggleDescAccordion(' + idx + ')" id="' + descId + '-toggle">';
     html += '<span class="arrow">&#9654;</span> Tactics & Descriptions';
     html += '</div>';
@@ -4110,8 +4173,8 @@ function renderCombatantDetail(c, idx, template) {
 }
 
 function toggleDescAccordion(idx) {
-  var toggle = document.getElementById('desc-accordion-' + idx + '-toggle');
-  var body = document.getElementById('desc-accordion-' + idx + '-body');
+  const toggle = document.getElementById('desc-accordion-' + idx + '-toggle');
+  const body = document.getElementById('desc-accordion-' + idx + '-body');
   if (toggle && body) {
     toggle.classList.toggle('open');
     body.classList.toggle('open');
@@ -4119,32 +4182,32 @@ function toggleDescAccordion(idx) {
 }
 
 function copyCombatField(btn, field) {
-  var combat = getActiveCombat();
-  var text = '';
+  const combat = getActiveCombat();
+  let text = '';
   if (field === 'party') {
-    var party = state.parties.find(function(p) { return p.id === combat.partyId; });
+    const party = state.parties.find(function(p) { return p.id === combat.partyId; });
     text = party ? party.name : '';
   } else {
-    var enc = state.encounters.find(function(e) { return e.id === combat.encounterId; });
+    const enc = state.encounters.find(function(e) { return e.id === combat.encounterId; });
     text = enc ? enc[field] || '' : '';
   }
   if (!text) return;
   navigator.clipboard.writeText(text).then(function() {
-    var orig = btn.textContent;
+    const orig = btn.textContent;
     btn.textContent = 'Copied!';
     setTimeout(function() { btn.textContent = orig; }, 1200);
   });
 }
 
 function copyDescText(btn, type, idx) {
-  var combat = getActiveCombat();
-  var c = combat.combatants[idx];
-  var t = getTemplate(c);
+  const combat = getActiveCombat();
+  const c = combat.combatants[idx];
+  const t = getTemplate(c);
   if (!t) return;
-  var text = type === 'tactics' ? t.tactics : type === 'player' ? t.playerDescription : t.dmDescription;
+  const text = type === 'tactics' ? t.tactics : type === 'player' ? t.playerDescription : t.dmDescription;
   if (!text) return;
   navigator.clipboard.writeText(text).then(function() {
-    var orig = btn.textContent;
+    const orig = btn.textContent;
     btn.textContent = 'Copied!';
     setTimeout(function() { btn.textContent = orig; }, 1200);
   });
@@ -4165,12 +4228,16 @@ function toggleCombatantDetail(idx) {
 }
 
 function setCombatantNotes(idx, value) {
-  getActiveCombat().combatants[idx].notes = value;
+  const c = getCombatant(idx);
+  if (!c) return;
+  c.notes = value;
   saveCombat();
 }
 
 function setPlayerAc(idx, value) {
-  getActiveCombat().combatants[idx].ac = value || 0;
+  const c = getCombatant(idx);
+  if (!c) return;
+  c.ac = value || 0;
   saveCombat();
   render();
 }
@@ -4210,7 +4277,8 @@ function updateConditionFields(idx) {
 }
 
 function addCondition(idx) {
-  const c = getActiveCombat().combatants[idx];
+  const c = getCombatant(idx);
+  if (!c) return;
   const nameEl = document.getElementById('condName-' + idx);
   const typeEl = document.getElementById('condType-' + idx);
   if (!nameEl || !typeEl) return;
@@ -4246,7 +4314,8 @@ function addCondition(idx) {
 }
 
 function removeCondition(idx, condIdx) {
-  const c = getActiveCombat().combatants[idx];
+  const c = getCombatant(idx);
+  if (!c) return;
   if (!c.conditions || !c.conditions[condIdx]) return;
   const name = c.conditions[condIdx].name;
   c.conditions.splice(condIdx, 1);
@@ -4260,7 +4329,8 @@ function removeCondition(idx, condIdx) {
 // ═══════════════════════════════════════════════════════════════
 
 function setConcentration(idx, spellName) {
-  const c = getActiveCombat().combatants[idx];
+  const c = getCombatant(idx);
+  if (!c) return;
   c.concentration = spellName.trim() || null;
   if (c.concentration) {
     setStatus(c.name + ' concentrating on ' + c.concentration, 'success');
@@ -4270,7 +4340,8 @@ function setConcentration(idx, spellName) {
 }
 
 function dropConcentration(idx) {
-  const c = getActiveCombat().combatants[idx];
+  const c = getCombatant(idx);
+  if (!c) return;
   const spell = c.concentration;
   c.concentration = null;
   setStatus(c.name + ' dropped concentration' + (spell ? ' on ' + spell : ''), 'warning');
@@ -4289,7 +4360,8 @@ function applyDamage(idx) {
   let dmg = originalDmg;
   if (dmg === 0) return;
 
-  const c = getActiveCombat().combatants[idx];
+  const c = getCombatant(idx);
+  if (!c) return;
   const template = getTemplate(c);
   const maxHp = template ? template.hpMax : (c.hpMax || c.currentHp);
 
@@ -4330,7 +4402,8 @@ function applyHeal(idx) {
   const heal = Math.max(0, parseInt(input.value) || 0);
   if (heal === 0) return;
 
-  const c = getActiveCombat().combatants[idx];
+  const c = getCombatant(idx);
+  if (!c) return;
   const template = getTemplate(c);
   const maxHp = template ? template.hpMax : (c.hpMax || c.currentHp);
   let curHp = c.currentHp !== undefined ? c.currentHp : maxHp;
@@ -4349,7 +4422,8 @@ function applyTempHp(idx) {
   if (!input) return;
   const val = Math.max(0, parseInt(input.value) || 0);
   if (val === 0) return;
-  const c = getActiveCombat().combatants[idx];
+  const c = getCombatant(idx);
+  if (!c) return;
   // THP doesn't stack - take the higher value
   c.tempHp = Math.max(c.tempHp || 0, val);
   setStatus(c.name + ' gains ' + val + ' temp HP', 'success');
@@ -4362,7 +4436,8 @@ function applyTempHp(idx) {
 // ═══════════════════════════════════════════════════════════════
 
 function useFeature(combatantIdx, featureIdx) {
-  const c = getActiveCombat().combatants[combatantIdx];
+  const c = getCombatant(combatantIdx);
+  if (!c) return;
   const template = getTemplate(c);
   if (!template) return;
   const f = template.features[featureIdx];
@@ -4377,7 +4452,8 @@ function useFeature(combatantIdx, featureIdx) {
 }
 
 function restoreFeature(combatantIdx, featureIdx) {
-  const c = getActiveCombat().combatants[combatantIdx];
+  const c = getCombatant(combatantIdx);
+  if (!c) return;
   const template = getTemplate(c);
   if (!template) return;
   const f = template.features[featureIdx];
@@ -4392,7 +4468,8 @@ function restoreFeature(combatantIdx, featureIdx) {
 }
 
 function rollRecharge(combatantIdx, featureIdx) {
-  const c = getActiveCombat().combatants[combatantIdx];
+  const c = getCombatant(combatantIdx);
+  if (!c) return;
   const template = getTemplate(c);
   if (!template) return;
   const f = template.features[featureIdx];
@@ -4418,7 +4495,8 @@ function rollRecharge(combatantIdx, featureIdx) {
 // ═══════════════════════════════════════════════════════════════
 
 function useLegendaryAction(combatantIdx, laIdx) {
-  const c = getActiveCombat().combatants[combatantIdx];
+  const c = getCombatant(combatantIdx);
+  if (!c) return;
   const template = getTemplate(c);
   if (!template) return;
   const la = template.legendaryActions[laIdx];
@@ -4434,7 +4512,8 @@ function useLegendaryAction(combatantIdx, laIdx) {
 }
 
 function useLegendaryResistance(combatantIdx) {
-  const c = getActiveCombat().combatants[combatantIdx];
+  const c = getCombatant(combatantIdx);
+  if (!c) return;
   const template = getTemplate(c);
   if (!template) return;
   if (c.legendaryResistancesRemaining === undefined) c.legendaryResistancesRemaining = template.legendaryResistances;
@@ -4448,7 +4527,8 @@ function useLegendaryResistance(combatantIdx) {
 }
 
 function restoreLegendaryResistance(combatantIdx) {
-  const c = getActiveCombat().combatants[combatantIdx];
+  const c = getCombatant(combatantIdx);
+  if (!c) return;
   const template = getTemplate(c);
   if (!template) return;
   if (c.legendaryResistancesRemaining === undefined) c.legendaryResistancesRemaining = template.legendaryResistances;
@@ -4460,7 +4540,8 @@ function restoreLegendaryResistance(combatantIdx) {
 }
 
 function restoreLegendaryAction(combatantIdx) {
-  const c = getActiveCombat().combatants[combatantIdx];
+  const c = getCombatant(combatantIdx);
+  if (!c) return;
   const template = getTemplate(c);
   if (!template) return;
   if (c.legendaryActionsRemaining === undefined) c.legendaryActionsRemaining = template.legendaryActionBudget;
@@ -4476,22 +4557,22 @@ function restoreLegendaryAction(combatantIdx) {
 // ═══════════════════════════════════════════════════════════════
 
 // ── Roll Mode Popup ──
-var rollPopupState = null;
+let rollPopupState = null;
 
 function positionPopup(popup, target) {
-  var rect = target.getBoundingClientRect();
+  const rect = target.getBoundingClientRect();
   popup.style.display = 'flex';
   // Measure popup dimensions
-  var pw = popup.offsetWidth;
-  var ph = popup.offsetHeight;
-  var vw = window.innerWidth;
-  var vh = window.innerHeight;
+  const pw = popup.offsetWidth;
+  const ph = popup.offsetHeight;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
   // Horizontal: default to button left, shift left if it overflows right edge
-  var left = rect.left;
+  let left = rect.left;
   if (left + pw > vw - 8) left = vw - pw - 8;
   if (left < 8) left = 8;
   // Vertical: default below button, flip above if it overflows bottom
-  var top = rect.bottom + 4;
+  let top = rect.bottom + 4;
   if (top + ph > vh - 8) top = rect.top - ph - 4;
   if (top < 8) top = 8;
   popup.style.left = left + 'px';
@@ -4501,7 +4582,7 @@ function positionPopup(popup, target) {
 function showRollPopup(evt, rollFnName, combatantIdx, param) {
   evt.stopPropagation();
   rollPopupState = { fnName: rollFnName, idx: combatantIdx, param: param };
-  var popup = document.getElementById('rollModePopup');
+  const popup = document.getElementById('rollModePopup');
   if (!popup) return;
   popup.innerHTML =
     '<button class="btn-sm btn-danger" onclick="fireRollPopup(\'disadvantage\')">Disadvantage</button>' +
@@ -4513,7 +4594,7 @@ function showRollPopup(evt, rollFnName, combatantIdx, param) {
 function showDmgPopup(evt, combatantIdx, attackIdx) {
   evt.stopPropagation();
   rollPopupState = { idx: combatantIdx, param: attackIdx };
-  var popup = document.getElementById('rollModePopup');
+  const popup = document.getElementById('rollModePopup');
   if (!popup) return;
   popup.innerHTML =
     '<button class="btn-sm" onclick="fireDmgPopup(false)">Normal</button>' +
@@ -4523,28 +4604,29 @@ function showDmgPopup(evt, combatantIdx, attackIdx) {
 
 function fireRollPopup(mode) {
   if (!rollPopupState) return;
-  var s = rollPopupState;
+  const s = rollPopupState;
   hideRollPopup();
   window[s.fnName](s.idx, s.param, mode);
 }
 
 function fireDmgPopup(crit) {
   if (!rollPopupState) return;
-  var s = rollPopupState;
+  const s = rollPopupState;
   hideRollPopup();
   rollDamageForAttack(s.idx, s.param, crit);
 }
 
 function hideRollPopup() {
   rollPopupState = null;
-  var popup = document.getElementById('rollModePopup');
+  const popup = document.getElementById('rollModePopup');
   if (popup) popup.style.display = 'none';
 }
 
 document.addEventListener('click', hideRollPopup);
 
 function rollAbilityCheck(combatantIdx, ability, mode) {
-  const c = getActiveCombat().combatants[combatantIdx];
+  const c = getCombatant(combatantIdx);
+  if (!c) return;
   const template = getTemplate(c);
   if (!template) return;
   const mod = abilityMod(template.abilities[ability]);
@@ -4559,7 +4641,8 @@ function rollAbilityCheck(combatantIdx, ability, mode) {
 }
 
 function rollSavingThrow(combatantIdx, ability, mode) {
-  const c = getActiveCombat().combatants[combatantIdx];
+  const c = getCombatant(combatantIdx);
+  if (!c) return;
   const template = getTemplate(c);
   if (!template) return;
   // Check for proficient saving throw
@@ -4576,18 +4659,19 @@ function rollSavingThrow(combatantIdx, ability, mode) {
 }
 
 function rollSkillCheck(combatantIdx, skillIdx, mode) {
-  var skillName = SKILLS[skillIdx];
-  var c = getActiveCombat().combatants[combatantIdx];
-  var template = getTemplate(c);
+  const skillName = SKILLS[skillIdx];
+  const c = getCombatant(combatantIdx);
+  if (!c) return;
+  const template = getTemplate(c);
   if (!template) return;
-  var ability = SKILL_ABILITY_MAP[skillName];
-  var skill = template.skills.find(function(s) { return s.name === skillName; });
-  var mod = skill ? skill.bonus : abilityMod(template.abilities[ability]);
-  var notation = '1d20' + (mod >= 0 ? '+' + mod : String(mod));
-  var opts = mode === 'advantage' ? { advantage: true } : mode === 'disadvantage' ? { disadvantage: true } : {};
-  var result = rollDice(notation, opts);
-  var modeLabel = mode === 'advantage' ? ' (Adv)' : mode === 'disadvantage' ? ' (Dis)' : '';
-  var profLabel = skill ? ' (prof)' : '';
+  const ability = SKILL_ABILITY_MAP[skillName];
+  const skill = template.skills.find(function(s) { return s.name === skillName; });
+  const mod = skill ? skill.bonus : abilityMod(template.abilities[ability]);
+  const notation = '1d20' + (mod >= 0 ? '+' + mod : String(mod));
+  const opts = mode === 'advantage' ? { advantage: true } : mode === 'disadvantage' ? { disadvantage: true } : {};
+  const result = rollDice(notation, opts);
+  const modeLabel = mode === 'advantage' ? ' (Adv)' : mode === 'disadvantage' ? ' (Dis)' : '';
+  const profLabel = skill ? ' (prof)' : '';
   if (!c.rollLog) c.rollLog = [];
   c.rollLog.push({ label: skillName + profLabel + modeLabel, text: esc(result.text) + ' = ' + result.total, cssClass: '' });
   saveCombat();
@@ -4599,7 +4683,8 @@ function rollSkillCheck(combatantIdx, skillIdx, mode) {
 // ═══════════════════════════════════════════════════════════════
 
 function rollAttack(combatantIdx, attackIdx, mode) {
-  const c = getActiveCombat().combatants[combatantIdx];
+  const c = getCombatant(combatantIdx);
+  if (!c) return;
   const template = getTemplate(c);
   if (!template) return;
   const atk = template.attacks[attackIdx];
@@ -4626,7 +4711,8 @@ function rollAttack(combatantIdx, attackIdx, mode) {
 }
 
 function rollDamageForAttack(combatantIdx, attackIdx, crit) {
-  const c = getActiveCombat().combatants[combatantIdx];
+  const c = getCombatant(combatantIdx);
+  if (!c) return;
   const template = getTemplate(c);
   if (!template) return;
   const atk = template.attacks[attackIdx];
@@ -4663,7 +4749,8 @@ function rollDamageForAttack(combatantIdx, attackIdx, crit) {
 function renderRollLog(combatantIdx) {
   const el = document.getElementById('rollLog-' + combatantIdx);
   if (!el) return;
-  const c = getActiveCombat().combatants[combatantIdx];
+  const c = getCombatant(combatantIdx);
+  if (!c) return;
   if (!c.rollLog || c.rollLog.length === 0) { el.innerHTML = ''; return; }
   let html = '<div class="roll-log">';
   c.rollLog.forEach(entry => {
@@ -4680,7 +4767,8 @@ function renderRollLog(combatantIdx) {
 // ═══════════════════════════════════════════════════════════════
 
 function applyTurnStartEffects(idx) {
-  const c = getActiveCombat().combatants[idx];
+  const c = getCombatant(idx);
+  if (!c) return;
   const template = getTemplate(c);
   c.reactionUsed = false;
   c.rollLog = [];
@@ -4723,7 +4811,8 @@ function applyTurnStartEffects(idx) {
 }
 
 function reverseTurnStartEffects(idx) {
-  var c = getActiveCombat().combatants[idx];
+  const c = getCombatant(idx);
+  if (!c) return;
   // Re-increment round-based condition durations that were decremented on turn start
   if (c.conditions && c.conditions.length > 0) {
     c.conditions.forEach(function(cond) {
@@ -4749,7 +4838,7 @@ function nextTurn() {
 
   // Collapse previous auto-expanded panel
   if (autoExpandedId) {
-    var prev = combat.combatants.find(function(c) { return c.id === autoExpandedId; });
+    const prev = combat.combatants.find(function(c) { return c.id === autoExpandedId; });
     if (prev) prev._expanded = false;
     autoExpandedId = null;
   }
@@ -4773,7 +4862,7 @@ function nextTurn() {
   applyTurnStartEffects(next);
 
   // Auto-expand the new active combatant
-  var active = combat.combatants[next];
+  const active = combat.combatants[next];
   if (!active._expanded) {
     active._expanded = true;
     autoExpandedId = active.id;
@@ -4790,7 +4879,7 @@ function prevTurn() {
 
   // Collapse previous auto-expanded panel
   if (autoExpandedId) {
-    var prevAuto = combat.combatants.find(function(c) { return c.id === autoExpandedId; });
+    const prevAuto = combat.combatants.find(function(c) { return c.id === autoExpandedId; });
     if (prevAuto) prevAuto._expanded = false;
     autoExpandedId = null;
   }
@@ -4816,7 +4905,7 @@ function prevTurn() {
   combat.turnIndex = prev;
 
   // Auto-expand the new active combatant
-  var active = combat.combatants[prev];
+  const active = combat.combatants[prev];
   if (!active._expanded) {
     active._expanded = true;
     autoExpandedId = active.id;
@@ -4828,7 +4917,9 @@ function prevTurn() {
 }
 
 function toggleReaction(idx) {
-  getActiveCombat().combatants[idx].reactionUsed = !getActiveCombat().combatants[idx].reactionUsed;
+  const c = getCombatant(idx);
+  if (!c) return;
+  c.reactionUsed = !c.reactionUsed;
   saveCombat();
   render();
 }
@@ -4869,7 +4960,8 @@ function editInit(idx, value) {
 }
 
 function killCombatant(idx) {
-  const c = getActiveCombat().combatants[idx];
+  const c = getCombatant(idx);
+  if (!c) return;
   c.dead = true;
   if (c.type === 'monster') c.currentHp = 0;
   setStatus(c.name + ' is dead.', 'warning');
@@ -4878,7 +4970,8 @@ function killCombatant(idx) {
 }
 
 function reviveCombatant(idx) {
-  const c = getActiveCombat().combatants[idx];
+  const c = getCombatant(idx);
+  if (!c) return;
   c.dead = false;
   if (c.type === 'monster' && (c.currentHp === undefined || c.currentHp <= 0)) c.currentHp = 1;
   setStatus(c.name + ' is back!', 'success');
@@ -4981,13 +5074,13 @@ function showImportDialog() {
       }
       activeCombatId = null;
       // Restore active combat ID from imported preferences if valid
-      var restoredCombatId = state.preferences && state.preferences.activeCombatId;
+      const restoredCombatId = state.preferences && state.preferences.activeCombatId;
       if (restoredCombatId && state.combats.find(function(c) { return c.id === restoredCombatId; })) {
         activeCombatId = restoredCombatId;
       }
       save();
       setStatus('Backup loaded! ' + added + ' new item' + (added !== 1 ? 's' : '') + ' added, duplicates skipped.', 'success');
-      var restoredView = state.preferences && state.preferences.view;
+      const restoredView = state.preferences && state.preferences.view;
       if (restoredView && ['templates', 'parties', 'encounters', 'combat'].includes(restoredView)) {
         switchView(restoredView);
       } else {
@@ -5025,21 +5118,15 @@ async function exportMonster(id) {
 }
 
 function showImportMonsterDialog() {
-  const existing = document.getElementById('importModal');
-  if (existing) existing.remove();
-  const modal = document.createElement('div');
-  modal.id = 'importModal';
-  modal.className = 'modal-overlay';
-  modal.innerHTML = '<div class="modal-content">' +
-    '<div class="form-section-title" style="margin-bottom:0.75rem">Import Monsters</div>' +
-    '<p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.75rem">Select one or more .squishtext files containing monster templates.</p>' +
+  const bodyHtml =
+    '<p class="text-muted-sm" style="margin-bottom:0.75rem">Select one or more .squishtext files containing monster templates.</p>' +
     '<input type="file" id="importFileInput" accept=".squishtext" multiple style="margin-bottom:1rem;font-size:0.8rem;color:var(--text)">' +
     '<p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:1rem">New monsters will be added. Existing monsters are kept (duplicates skipped by ID).</p>' +
-    '<div style="display:flex;gap:0.5rem;justify-content:flex-end">' +
+    '<div class="flex-row-end">' +
     '<button class="btn-sm" onclick="document.getElementById(\'importModal\').remove()">Cancel</button>' +
     '<button class="btn-sm btn-action" onclick="doImportMonster()">Import</button>' +
-    '</div></div>';
-  document.body.appendChild(modal);
+    '</div>';
+  createModal('importModal', 'Import Monsters', bodyHtml);
 }
 
 async function doImportMonster() {
@@ -5079,17 +5166,8 @@ async function doImportMonster() {
 // ═══════════════════════════════════════════════════════════════
 
 function showDiceRoller() {
-  var existing = document.getElementById('diceRollerModal');
-  if (existing) existing.remove();
-
-  var modal = document.createElement('div');
-  modal.id = 'diceRollerModal';
-  modal.className = 'modal-overlay';
-  modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
-
-  modal.innerHTML = '<div class="modal-content" onclick="event.stopPropagation()">' +
-    '<div class="form-section-title" style="margin-bottom:0.25rem">Dice Roller</div>' +
-    '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.4">' +
+  const bodyHtml =
+    '<div class="text-dim-sm" style="margin-bottom:0.75rem;line-height:1.4">' +
     'Examples: <span style="font-family:var(--mono)">2d6+3</span> &middot; ' +
     '<span style="font-family:var(--mono)">1d20+5 adv</span> &middot; ' +
     '<span style="font-family:var(--mono)">4d6*10</span> &middot; ' +
@@ -5104,33 +5182,23 @@ function showDiceRoller() {
     '<button class="btn-sm btn-action" onclick="doDiceRoll()">Roll</button>' +
     '</div>' +
     '<div id="diceRollerResults" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"></div>' +
-    '<div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.75rem">' +
+    '<div class="flex-row-end" style="margin-top:0.75rem">' +
     '<button class="btn-sm" onclick="diceRollerHistory=[];renderDiceRollerResults()">Clear</button>' +
     '<button class="btn-sm" onclick="document.getElementById(\'diceRollerModal\').remove()">Close</button>' +
-    '</div></div>';
-
-  document.body.appendChild(modal);
+    '</div>';
+  createModal('diceRollerModal', 'Dice Roller', bodyHtml, {
+    clickOutsideClose: true, escapeClose: true, focusId: 'diceRollerInput', titleMargin: '0.25rem'
+  });
   renderDiceRollerResults();
-  setTimeout(function() { var el = document.getElementById('diceRollerInput'); if (el) el.focus(); }, 50);
-
-  // Escape to close
-  function escHandler(e) {
-    if (e.key === 'Escape') {
-      var m = document.getElementById('diceRollerModal');
-      if (m) m.remove();
-      document.removeEventListener('keydown', escHandler);
-    }
-  }
-  document.addEventListener('keydown', escHandler);
 }
 
 function doDiceRoll() {
-  var input = document.getElementById('diceRollerInput');
+  const input = document.getElementById('diceRollerInput');
   if (!input) return;
-  var expr = input.value.trim();
+  const expr = input.value.trim();
   if (!expr) return;
 
-  var result = rollDiceExpression(expr);
+  const result = rollDiceExpression(expr);
 
   if (result.error) {
     diceRollerHistory.unshift({ error: true, text: 'Invalid: ' + esc(expr) + ' -- ' + esc(result.error) });
@@ -5152,7 +5220,7 @@ function doDiceRoll() {
 }
 
 function renderDiceRollerResults() {
-  var container = document.getElementById('diceRollerResults');
+  const container = document.getElementById('diceRollerResults');
   if (!container) return;
 
   if (diceRollerHistory.length === 0) {
@@ -5160,13 +5228,13 @@ function renderDiceRollerResults() {
     return;
   }
 
-  var html = '';
-  for (var i = 0; i < diceRollerHistory.length; i++) {
-    var entry = diceRollerHistory[i];
+  let html = '';
+  for (let i = 0; i < diceRollerHistory.length; i++) {
+    const entry = diceRollerHistory[i];
     if (entry.error) {
       html += '<div class="dice-roller-entry" style="color:var(--error)">' + entry.text + '</div>';
     } else {
-      var showBreakdown = entry.breakdown !== String(entry.total);
+      const showBreakdown = entry.breakdown !== String(entry.total);
       html += '<div class="dice-roller-entry">';
       html += '<span style="color:var(--text-muted);font-size:0.75rem">' + esc(entry.expression) + '</span>';
       if (showBreakdown) {
@@ -5204,8 +5272,8 @@ function updateStorageInfo() {
 // ═══════════════════════════════════════════════════════════════
 
 load().then(() => {
-  var savedView = state.preferences && state.preferences.view;
-  var savedCombatId = state.preferences && state.preferences.activeCombatId;
+  const savedView = state.preferences && state.preferences.view;
+  const savedCombatId = state.preferences && state.preferences.activeCombatId;
   // Restore active combat ID before switchView (which would clear it)
   if (savedView === 'combat' && savedCombatId && state.combats.find(function(c) { return c.id === savedCombatId; })) {
     activeCombatId = savedCombatId;
