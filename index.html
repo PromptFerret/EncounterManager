@@ -5040,8 +5040,9 @@ function strip5eToolsTags(text) {
       if (tag === 'actsavefail') return 'Failure:';
       if (tag === 'actsavesuccess') return 'Success:';
       if (tag === 'actsavesuccessorfail') return 'Success or Failure:';
-      // Reference tags: take first segment before |
-      return content.split('|')[0].trim();
+      // Reference tags: use display text (3rd segment) if present, otherwise first segment
+      const parts = content.split('|');
+      return (parts.length >= 3 ? parts[parts.length - 1] : parts[0]).trim();
     });
   }
   return s.trim();
@@ -5757,7 +5758,7 @@ function switchImportMode(mode) {
       '<p class="text-muted-sm" style="margin-bottom:0.5rem">Or select .json files:</p>' +
       '<input type="file" id="importFileInput" accept=".json" multiple style="margin-bottom:1rem;font-size:0.8rem;color:var(--text)">' +
       '<p style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.75rem">Accepts single creatures or bestiary files with a "monster" array. Duplicates skipped by name.</p>' +
-      '<p style="font-size:0.7rem;color:var(--text-dim);margin-bottom:0;font-style:italic">Note: 5etools data varies widely in structure. Always review imported creatures and fix any issues - especially complex abilities like Mythic, Villain, or Epic Actions, which are best added as notes in the feature description.</p>';
+      '<p style="font-size:0.72rem;color:var(--danger);margin-bottom:0;padding:0.5rem 0.6rem;border:1px solid var(--danger);border-radius:var(--radius);background:rgba(255,80,80,0.08)">Warning: 5etools data varies widely in structure. Always review imported creatures and fix any issues - especially complex abilities like Mythic, Villain, or Epic Actions, which are best added as notes in the feature description.</p>';
   }
 }
 

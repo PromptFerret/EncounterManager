@@ -87,14 +87,14 @@ The `templates` array can contain one or more monster templates. When importing,
   "features": [
     {
       "name": "Charge",
-      "description": "If the minotaur moves at least 10 feet straight toward a target and then hits it with a gore attack on the same turn, the target takes an extra 2d8 piercing damage.",
+      "desc": "If the minotaur moves at least 10 feet straight toward a target and then hits it with a gore attack on the same turn, the target takes an extra 2d8 piercing damage.",
       "recharge": null,
       "uses": null,
       "usesMax": null
     },
     {
       "name": "Reckless",
-      "description": "At the start of its turn, the minotaur can gain advantage on all melee weapon attack rolls during that turn, but attack rolls against it have advantage until the start of its next turn.",
+      "desc": "At the start of its turn, the minotaur can gain advantage on all melee weapon attack rolls during that turn, but attack rolls against it have advantage until the start of its next turn.",
       "recharge": null,
       "uses": null,
       "usesMax": null
@@ -167,14 +167,14 @@ Array of objects:
 
 ```json
 "savingThrows": [
-  { "ability": "Wisdom", "bonus": 5 },
-  { "ability": "Constitution", "bonus": 6 }
+  { "ability": "wis", "bonus": 5 },
+  { "ability": "con", "bonus": 6 }
 ]
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `ability` | string | Full ability name: "Strength", "Dexterity", "Constitution", "Intelligence", "Wisdom", "Charisma" |
+| `ability` | string | Ability abbreviation: `"str"`, `"dex"`, `"con"`, `"int"`, `"wis"`, `"cha"` |
 | `bonus` | number | Total save modifier (e.g., +5) |
 
 ### Skills
@@ -236,7 +236,7 @@ Array of feature/trait objects:
 "features": [
   {
     "name": "Fire Breath",
-    "description": "The dragon exhales fire in a 15-foot cone. Each creature in that area must make a DC 11 Dexterity saving throw, taking 7d6 fire damage on a failed save, or half as much damage on a successful one.",
+    "desc": "The dragon exhales fire in a 15-foot cone. Each creature in that area must make a DC 11 Dexterity saving throw, taking 7d6 fire damage on a failed save, or half as much damage on a successful one.",
     "recharge": "5-6",
     "uses": 1,
     "usesMax": 1
@@ -247,10 +247,33 @@ Array of feature/trait objects:
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | string | Feature name |
-| `description` | string | Full text. Dice notation like `7d6` becomes clickable in combat. |
+| `desc` | string | Full text. Dice notation like `7d6` becomes clickable in combat. |
 | `recharge` | string or null | Recharge range (e.g., "5-6" means recharges on a d6 roll of 5 or 6). `null` for no recharge. |
-| `uses` | number or null | Current remaining uses. Set equal to `usesMax` for a fresh monster. |
-| `usesMax` | number or null | Maximum uses. `null` for unlimited. |
+| `uses` | number or null | Not used by combat - can be omitted or set to `null`. Exists for template-level bookkeeping only. |
+| `usesMax` | number or null | **Mechanically important.** Maximum uses per combat. `null` for unlimited. Combat initializes remaining uses from this value and tracks them automatically. |
+
+### Reactions and Bonus Actions
+
+EncounterManager does not have separate fields for reactions or bonus actions. Model them as features with the action type in the name:
+
+```json
+"features": [
+  {
+    "name": "Parry (Reaction)",
+    "desc": "The knight adds 2 to its AC against one melee attack that would hit it. To do so, the knight must see the attacker and be wielding a melee weapon.",
+    "recharge": null,
+    "usesMax": null
+  },
+  {
+    "name": "Healing Word (Bonus Action)",
+    "desc": "The cleric casts healing word. One creature within 60 feet regains 1d4+3 hit points.",
+    "recharge": null,
+    "usesMax": 3
+  }
+]
+```
+
+Include trigger conditions in the `desc` text so the DM knows when the ability applies. The 5etools importer uses this same pattern automatically.
 
 ### Legendary Actions
 
@@ -260,12 +283,12 @@ Array of feature/trait objects:
   {
     "name": "Detect",
     "cost": 1,
-    "description": "The dragon makes a Wisdom (Perception) check."
+    "desc": "The dragon makes a Wisdom (Perception) check."
   },
   {
     "name": "Tail Attack",
     "cost": 2,
-    "description": "The dragon makes a tail attack."
+    "desc": "The dragon makes a tail attack."
   }
 ],
 "legendaryResistances": 3
@@ -274,7 +297,7 @@ Array of feature/trait objects:
 | Field | Type | Description |
 |-------|------|-------------|
 | `legendaryActionBudget` | number | Legendary actions per round (typically 3). Set to 0 for no legendary actions. |
-| `legendaryActions` | array | Each with `name` (string), `cost` (number), and `description` (string) |
+| `legendaryActions` | array | Each with `name` (string), `cost` (number), and `desc` (string) |
 | `legendaryResistances` | number | Number of legendary resistances. Set to 0 for none. |
 
 ### Other Fields

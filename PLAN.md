@@ -480,34 +480,38 @@ Bug fixes during testing:
 - Recharge abilities: `usesMax` set to 1 so Use/Restore/Roll Recharge buttons appear
 - Detail panel: `grid-template-columns: 1fr auto` → `1fr minmax(0, 320px)` to prevent right column domination
 - Legendary actions/resistances moved from right column to left column for better readability
+- `flattenEntries`: `type:"itemSub"` handling alongside `type:"item"`, supports `entry` (singular) field, type-specific checks moved before generic `entries.entries` fallback
+- `parse5eAlignment`: axis analysis for alignment ranges (e.g., `["L","NX","C","E"]` -> "Any Evil")
+- `parse5eLegendary`: cost regex now matches `(N Actions)` without requiring "Costs" prefix
+- Senses: wrapped with `strip5eToolsTags()` to handle `{@variantrule}` tags
+- `strip5eToolsTags`: display text support - uses 3rd segment when present (e.g., `{@variantrule Cone [Area of Effect]|XPHB|Cone}` -> "Cone")
+- Import disclaimer: danger-styled warning on 5etools modal advising DMs to review imported creatures
+- Em dash cleanup: 5 Unicode em dashes replaced with ASCII hyphens throughout codebase
 
-## Future Phases
+### Phase 7 Import Testing
 
-### Phase 7.x - Villain Actions & Import Refinements
+Tested across 11 creatures covering all major categories:
+- Goblin Warrior (CR 1/4, basic)
+- Scion of Memnor (CR 26, legendary)
+- Xogomoc (CR 30, MCDM villain actions)
+- The World Ender (CR 30, Drakkenheim epic actions, special HP)
+- Elf Vampire (shapeshifter, alignment ranges, itemSub entries)
+- Vampire Infernalist (spellcaster, nested entries)
+- Aspect of Bahamut (mythic actions)
+- Bone Swarm (swarm, choice-based damage)
+- Loup Garou (lycanthrope, form restrictions)
+- Illithilich (innate psionics + regular spellcasting, variable LA cost)
+- Adult Red Dragon (2024 tags with display text)
+- Gas Spore Fungus (low CR utility)
 
-Discovered during 5etools import testing with complex creatures. These are schema/UI additions needed to properly support the full range of 5etools monster data.
+Known edge cases covered by import disclaimer (DM verifies after import):
+- Choice-based damage (bludgeoning/piercing/slashing options) - appears as additive
+- Versatile weapons (one-handed vs two-handed) - appears as single entry
+- Variable legendary action costs (e.g., "Costs 1-3 Actions") - defaults to cost 1
+- Mythic actions - imported as features with "(Mythic)" suffix, mythicHeader text lost
+- Non-standard action economies (VA, EA) - imported as features or legendary actions
 
-**Status: Gathering requirements** — testing more monsters before implementing to find additional gaps.
-
-#### 7.x.1 - Import Testing Tracker
-
-Non-standard action economies (MCDM villain actions, Drakkenheim epic actions, etc.) are imported as features or legendary actions. The DM is expected to understand their creatures' rules — the importer captures the data faithfully.
-
-Tested so far: Goblin Warrior (CR 1/4), Scion of Memnor (CR 26), Xogomoc (CR 30, MCDM villain actions), The World Ender (CR 30, Drakkenheim epic actions).
-
-- [ ] Spellcasting creatures (Vampire, Lich, etc.)
-- [ ] Mythic creatures (Tiamat-style)
-- [ ] Creatures with multiple AC forms (shapeshifters)
-- [x] Creatures with special HP (scaling) — The World Ender: hpMax:0, formula stores special text
-- [x] `|source` tags on conditions — fixed (strip before `|`)
-- [x] Dual reach+range attacks — fixed (both captured)
-- [x] Legendary action continuations — fixed (merged into previous)
-- [x] Recharge abilities missing Use button — fixed (usesMax: 1)
-- [x] Hover duplication in speed — fixed (condition takes priority over canHover flag)
-
----
-
-#### Phase 7 Reference Documentation
+### Phase 7 Reference Documentation
 
 #### Importer Architecture Pattern (applies to all future importers)
 
@@ -774,6 +778,8 @@ Detection and parsing:
 - `resist`/`immune` with `preNote` - text before the resistance list
 - `initiative.advantageMode: "adv"` → set `initAdvantage: true`
 - `initiative` as plain number → use as flat init bonus directly
+
+## Future Phases
 
 ### Phase 8 - CritterDB Importer
 - Discovery: investigate CritterDB JSON export format

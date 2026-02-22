@@ -33,11 +33,48 @@ On the Monsters tab, each monster card has an **Export** button. Click it to dow
 
 Share these files with other DMs, keep them as individual backups, or build a personal library outside the browser.
 
-### Importing Monsters
+### Importing Monsters (SquishText)
 
-On the Monsters tab, click **Import Monster** in the toolbar. A dialog opens where you can select one or more `.squishtext` files at once.
+On the Monsters tab, click **Import Monster** in the toolbar. The dialog defaults to **SquishText** mode where you can select one or more `.squishtext` files at once.
 
 The same smart merge applies - new monsters are added, duplicates (by ID) are skipped.
+
+SquishText mode also auto-detects 5etools JSON format - if you accidentally load a 5etools JSON file in SquishText mode, it will route to the 5etools parser automatically.
+
+### Importing Monsters (5etools)
+
+Click the **5etools** toggle in the Import Monster dialog to switch to 5etools import mode. This lets you import monster data from [5etools](https://5e.tools/) creature JSON.
+
+**Two input methods:**
+- **Paste** - copy monster JSON from 5etools and paste it into the text area
+- **File** - click the file button to load a `.json` file
+
+The importer handles single creatures (a top-level JSON object) and multi-creature exports (a `{ "monster": [...] }` wrapper).
+
+**What gets imported:**
+- All core stats: name, size, type, alignment, AC, HP, speed, abilities, CR
+- Saving throws and skills
+- Damage resistances, immunities, vulnerabilities, and condition immunities
+- Senses, languages, passive perception
+- Initiative bonus (including advantage detection)
+- Attacks with hit bonus, reach/range, and damage dice
+- Multiattack text
+- Features and traits with recharge and use tracking
+- Spellcasting (converted to features)
+- Legendary actions with cost, legendary resistances
+- Bonus actions and reactions (added as features with type annotation)
+
+**What to check after import:**
+
+5etools data varies widely in structure across different sources (official, homebrew, third-party). The importer handles the most common patterns, but some complex abilities may need manual cleanup:
+
+- **Mythic actions** - imported as features with "(Mythic)" in the name
+- **Villain actions / Epic actions** - imported as features or legendary actions
+- **Choice-based damage** (e.g., bludgeoning or piercing) - may appear as additive damage entries
+- **Versatile weapons** - both damage forms may merge into one entry
+- **Variable legendary action costs** (e.g., "Costs 1-3 Actions") - defaults to cost 1
+
+Duplicates are skipped by name - if you already have a monster with the same name, it will not be imported again.
 
 ## The SquishText Format
 
