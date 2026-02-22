@@ -221,3 +221,28 @@ A typical turn looks like this:
 9. **Next >>** to move on
 
 The roll log clears when you advance past a combatant's turn, so review results before moving on.
+
+## Dice Roller
+
+The **Roll Dice** button in the toolbar (available on every tab, not just combat) opens a general-purpose dice roller for quick rolls outside the combat panel - NPC ability checks, random tables, fall damage, loot, or anything else.
+
+Type a dice expression and press **Enter** or click **Roll**. Results appear below with a breakdown of individual dice.
+
+**Supported syntax:**
+
+| Expression | What it does |
+|------------|-------------|
+| `2d6+3` | Roll 2d6, add 3 |
+| `d20` | Shorthand for 1d20 |
+| `1d20+5 adv` | Roll with advantage (also accepts `advantage`) |
+| `1d20+5 dis` | Roll with disadvantage (also accepts `disadvantage`) |
+| `4d6*10` | Roll 4d6, multiply total by 10 |
+| `2d8+8/2` | Roll 2d8, add 4 (8/2 evaluated first) |
+| `(2d8+4)*2` | Roll 2d8+4, then double the total |
+| `((2d8+4)+(2d8+4))/2` | Average of two 2d8+4 rolls |
+
+**Math follows PEMDAS** - multiplication and division happen before addition and subtraction. Use parentheses to group operations when you want a different order. `2d8+4*2` means `2d8 + (4*2) = 2d8+8`, while `(2d8+4)*2` doubles the entire roll.
+
+Whitespace is ignored: `1 d 20 + 5` works the same as `1d20+5`.
+
+Roll history stays visible while the modal is open, and persists if you close and reopen it. Click **Clear** to reset.

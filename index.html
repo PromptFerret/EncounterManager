@@ -72,6 +72,7 @@
     border-bottom: 1px solid var(--border);
     background: var(--surface);
     flex-wrap: wrap;
+    position: relative;
   }
   .toolbar .sep { width: 1px; height: 1.5rem; background: var(--border); margin: 0 0.25rem; }
   .toolbar .spacer { flex: 1; }
@@ -902,6 +903,16 @@
     color: var(--warning);
   }
   .edit-field-modified { border-color: var(--warning) !important; }
+  .dice-roller-entry {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.82rem;
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  .dice-roller-entry:last-child { border-bottom: none; }
   .edit-field-conflict { opacity: 0.5; }
   .btn-revert {
     font-size: 0.78rem;
@@ -944,11 +955,12 @@
   <button class="btn-toggle" id="navParties" onclick="switchView('parties')">Parties</button>
   <button class="btn-toggle" id="navEncounters" onclick="switchView('encounters')">Encounters</button>
   <button class="btn-toggle" id="navCombat" onclick="activeCombatId=null;switchView('combat')">Combat</button>
+  <button class="btn-toggle" onclick="showDiceRoller()" style="position:absolute;left:50%;transform:translateX(-50%)">Roll Dice</button>
   <div class="spacer"></div>
-  <button class="btn-sm" onclick="showImportDialog()" title="Load backup">Load Backup</button>
-  <button class="btn-sm" onclick="exportData()" title="Save backup">Save Backup</button>
+  <button class="btn-toggle" onclick="showImportDialog()" title="Load backup">Load Backup</button>
+  <button class="btn-toggle" onclick="exportData()" title="Save backup">Save Backup</button>
   <div class="sep"></div>
-  <button class="btn-sm" id="btnImportMonster" onclick="showImportMonsterDialog()">Import Monster</button>
+  <button class="btn-toggle" id="btnImportMonster" onclick="showImportMonsterDialog()">Import Monster</button>
   <button class="btn-action" id="btnNew" onclick="handleNew()">+ New Monster</button>
 </div>
 
@@ -1028,6 +1040,7 @@ let editFormVisible = false;       // is the edit form showing
 let editRawTemplate = null;        // raw template for diffing/revert
 let editFormSnapshot = null;       // snapshot of editFormData at open/save for dirty check
 let editConflicts = new Set();     // set of field paths where selected combatants disagree
+var diceRollerHistory = [];        // ephemeral roll history for the dice roller modal
 
 function getActiveCombat() {
   if (!activeCombatId) return null;
@@ -1310,6 +1323,210 @@ function rollInlineDice(combatantIdx, notation, sourceType, sourceIdx) {
   c.rollLog.push({ label: label, text: esc(result.text) + (result.text.indexOf('=') === -1 ? ' = ' + result.total : ''), cssClass: '' });
   saveCombat();
   renderRollLog(combatantIdx);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ── Dice Expression Parser (general-purpose roller) ──
+// ═══════════════════════════════════════════════════════════════
+
+function parseDiceExpression(input) {
+  var expr = (input || '').trim();
+  if (!expr) return { ast: null, mode: null, error: 'Empty expression' };
+
+  // Extract adv/dis suffix
+  var mode = null;
+  var suffixMatch = expr.match(/\s+(adv(?:antage)?|dis(?:advantage)?)\s*$/i);
+  if (suffixMatch) {
+    mode = suffixMatch[1].toLowerCase().startsWith('adv') ? 'advantage' : 'disadvantage';
+    expr = expr.substring(0, suffixMatch.index);
+  }
+
+  // Strip all whitespace
+  expr = expr.replace(/\s/g, '');
+  if (!expr) return { ast: null, mode: mode, error: 'Empty expression' };
+
+  // Tokenize
+  var tokens = [];
+  var i = 0;
+  while (i < expr.length) {
+    var ch = expr[i];
+    if (ch >= '0' && ch <= '9') {
+      var num = '';
+      while (i < expr.length && expr[i] >= '0' && expr[i] <= '9') { num += expr[i]; i++; }
+      tokens.push({ type: 'NUMBER', value: parseInt(num) });
+    } else if (ch === 'd' || ch === 'D') {
+      tokens.push({ type: 'D' }); i++;
+    } else if (ch === '+') {
+      tokens.push({ type: 'PLUS' }); i++;
+    } else if (ch === '-') {
+      tokens.push({ type: 'MINUS' }); i++;
+    } else if (ch === '*') {
+      tokens.push({ type: 'STAR' }); i++;
+    } else if (ch === '/') {
+      tokens.push({ type: 'SLASH' }); i++;
+    } else if (ch === '(') {
+      tokens.push({ type: 'LPAREN' }); i++;
+    } else if (ch === ')') {
+      tokens.push({ type: 'RPAREN' }); i++;
+    } else {
+      return { ast: null, mode: mode, error: 'Unexpected character: ' + ch };
+    }
+  }
+
+  // Recursive descent parser
+  var pos = 0;
+  function peek() { return pos < tokens.length ? tokens[pos] : null; }
+  function consume() { return tokens[pos++]; }
+
+  function parseExpression() {
+    var left = parseTerm();
+    if (!left) return null;
+    while (peek() && (peek().type === 'PLUS' || peek().type === 'MINUS')) {
+      var op = consume().type === 'PLUS' ? '+' : '-';
+      var right = parseTerm();
+      if (!right) return null;
+      left = { type: 'binop', op: op, left: left, right: right };
+    }
+    return left;
+  }
+
+  function parseTerm() {
+    var left = parseFactor();
+    if (!left) return null;
+    while (peek() && (peek().type === 'STAR' || peek().type === 'SLASH')) {
+      var op = consume().type === 'STAR' ? '*' : '/';
+      var right = parseFactor();
+      if (!right) return null;
+      left = { type: 'binop', op: op, left: left, right: right };
+    }
+    return left;
+  }
+
+  function parseFactor() {
+    var t = peek();
+    if (!t) return null;
+
+    // Parenthesized expression
+    if (t.type === 'LPAREN') {
+      consume();
+      var inner = parseExpression();
+      if (!inner) return null;
+      if (!peek() || peek().type !== 'RPAREN') return null;
+      consume();
+      return { type: 'paren', inner: inner };
+    }
+
+    // Bare 'd' (e.g. d20 = 1d20)
+    if (t.type === 'D') {
+      consume();
+      var sidesT = peek();
+      if (!sidesT || sidesT.type !== 'NUMBER') return null;
+      consume();
+      return { type: 'dice', count: 1, sides: sidesT.value };
+    }
+
+    // Number, possibly followed by 'd' for dice
+    if (t.type === 'NUMBER') {
+      consume();
+      if (peek() && peek().type === 'D') {
+        consume();
+        var sidesT2 = peek();
+        if (!sidesT2 || sidesT2.type !== 'NUMBER') return null;
+        consume();
+        return { type: 'dice', count: t.value, sides: sidesT2.value };
+      }
+      return { type: 'number', value: t.value };
+    }
+
+    return null;
+  }
+
+  var ast = parseExpression();
+  if (!ast || pos < tokens.length) {
+    return { ast: null, mode: mode, error: 'Invalid expression' };
+  }
+  return { ast: ast, mode: mode, error: null };
+}
+
+function evalDiceNode(node, mode) {
+  if (node.type === 'number') {
+    return { value: node.value, text: String(node.value), hasDice: false };
+  }
+
+  if (node.type === 'dice') {
+    var count = node.count;
+    var sides = node.sides;
+    if (count > 1000) return { value: 0, text: 'ERR:too many dice', hasDice: true };
+    if (count === 0) return { value: 0, text: '0', hasDice: true };
+
+    // Advantage/disadvantage for exactly 1d20
+    if (count === 1 && sides === 20 && mode) {
+      var r1 = Math.floor(Math.random() * 20) + 1;
+      var r2 = Math.floor(Math.random() * 20) + 1;
+      var pick = mode === 'advantage' ? Math.max(r1, r2) : Math.min(r1, r2);
+      return { value: pick, text: '[' + r1 + ', ' + r2 + ']->' + pick, hasDice: true };
+    }
+
+    var rolls = [];
+    for (var i = 0; i < count; i++) rolls.push(Math.floor(Math.random() * sides) + 1);
+    var sum = rolls.reduce(function(a, b) { return a + b; }, 0);
+
+    var text;
+    if (count === 1) {
+      text = String(rolls[0]);
+    } else if (count <= 10) {
+      text = '[' + rolls.join(', ') + ']';
+    } else {
+      text = '(' + sum + ')';
+    }
+    return { value: sum, text: text, hasDice: true };
+  }
+
+  if (node.type === 'paren') {
+    var inner = evalDiceNode(node.inner, mode);
+    return { value: inner.value, text: '(' + inner.text + ')', hasDice: inner.hasDice };
+  }
+
+  if (node.type === 'binop') {
+    var left = evalDiceNode(node.left, mode);
+    var right = evalDiceNode(node.right, mode);
+    var val;
+    if (node.op === '+') val = left.value + right.value;
+    else if (node.op === '-') val = left.value - right.value;
+    else if (node.op === '*') val = left.value * right.value;
+    else if (node.op === '/') {
+      if (right.value === 0) return { value: 0, text: 'ERR:div/0', hasDice: true };
+      val = Math.floor(left.value / right.value);
+    }
+
+    // For * and /: if neither side has dice, collapse to computed value
+    if ((node.op === '*' || node.op === '/') && !left.hasDice && !right.hasDice) {
+      return { value: val, text: String(val), hasDice: false };
+    }
+
+    var opStr = node.op === '*' ? ' * ' : node.op === '/' ? ' / ' : node.op === '-' ? ' - ' : ' + ';
+    return { value: val, text: left.text + opStr + right.text, hasDice: left.hasDice || right.hasDice };
+  }
+
+  return { value: 0, text: 'ERR', hasDice: false };
+}
+
+function rollDiceExpression(input) {
+  var parsed = parseDiceExpression(input);
+  if (parsed.error) return { error: parsed.error, input: input };
+
+  var result = evalDiceNode(parsed.ast, parsed.mode);
+  var total = Math.floor(result.value);
+  var modeLabel = parsed.mode === 'advantage' ? ' (adv)' : parsed.mode === 'disadvantage' ? ' (dis)' : '';
+  var cleanInput = input.trim().replace(/\s+(adv(?:antage)?|dis(?:advantage)?)\s*$/i, '').replace(/\s/g, '');
+
+  return {
+    error: null,
+    input: cleanInput + modeLabel,
+    mode: parsed.mode,
+    breakdown: result.text,
+    total: total
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -4855,6 +5072,112 @@ async function doImportMonster() {
     console.error('Monster import failed:', e);
     setStatus('Import failed: ' + e.message, 'error');
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ── Dice Roller Modal ──
+// ═══════════════════════════════════════════════════════════════
+
+function showDiceRoller() {
+  var existing = document.getElementById('diceRollerModal');
+  if (existing) existing.remove();
+
+  var modal = document.createElement('div');
+  modal.id = 'diceRollerModal';
+  modal.className = 'modal-overlay';
+  modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+
+  modal.innerHTML = '<div class="modal-content" onclick="event.stopPropagation()">' +
+    '<div class="form-section-title" style="margin-bottom:0.25rem">Dice Roller</div>' +
+    '<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.4">' +
+    'Examples: <span style="font-family:var(--mono)">2d6+3</span> &middot; ' +
+    '<span style="font-family:var(--mono)">1d20+5 adv</span> &middot; ' +
+    '<span style="font-family:var(--mono)">4d6*10</span> &middot; ' +
+    '<span style="font-family:var(--mono)">(2d8+4)*2</span><br>' +
+    'Follows PEMDAS: * and / before + and -. Use parentheses to group: <span style="font-family:var(--mono)">(2d8+4)/2</span>' +
+    '</div>' +
+    '<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem">' +
+    '<input type="text" id="diceRollerInput" placeholder="2d6+3, 1d20+5 adv, (2d8+4)*2" ' +
+    'style="flex:1;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius);' +
+    'background:var(--bg);color:var(--text);font-size:0.85rem;font-family:var(--mono)" ' +
+    'onkeydown="if(event.key===\'Enter\'){event.preventDefault();doDiceRoll()}">' +
+    '<button class="btn-sm btn-action" onclick="doDiceRoll()">Roll</button>' +
+    '</div>' +
+    '<div id="diceRollerResults" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"></div>' +
+    '<div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.75rem">' +
+    '<button class="btn-sm" onclick="diceRollerHistory=[];renderDiceRollerResults()">Clear</button>' +
+    '<button class="btn-sm" onclick="document.getElementById(\'diceRollerModal\').remove()">Close</button>' +
+    '</div></div>';
+
+  document.body.appendChild(modal);
+  renderDiceRollerResults();
+  setTimeout(function() { var el = document.getElementById('diceRollerInput'); if (el) el.focus(); }, 50);
+
+  // Escape to close
+  function escHandler(e) {
+    if (e.key === 'Escape') {
+      var m = document.getElementById('diceRollerModal');
+      if (m) m.remove();
+      document.removeEventListener('keydown', escHandler);
+    }
+  }
+  document.addEventListener('keydown', escHandler);
+}
+
+function doDiceRoll() {
+  var input = document.getElementById('diceRollerInput');
+  if (!input) return;
+  var expr = input.value.trim();
+  if (!expr) return;
+
+  var result = rollDiceExpression(expr);
+
+  if (result.error) {
+    diceRollerHistory.unshift({ error: true, text: 'Invalid: ' + esc(expr) + ' -- ' + esc(result.error) });
+  } else {
+    diceRollerHistory.unshift({
+      error: false,
+      expression: result.input,
+      mode: result.mode,
+      breakdown: result.breakdown,
+      total: result.total
+    });
+  }
+
+  // Cap history at 50
+  if (diceRollerHistory.length > 50) diceRollerHistory.length = 50;
+
+  renderDiceRollerResults();
+  input.select();
+}
+
+function renderDiceRollerResults() {
+  var container = document.getElementById('diceRollerResults');
+  if (!container) return;
+
+  if (diceRollerHistory.length === 0) {
+    container.innerHTML = '<div style="text-align:center;color:var(--text-dim);font-size:0.78rem;padding:1rem 0">No rolls yet</div>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < diceRollerHistory.length; i++) {
+    var entry = diceRollerHistory[i];
+    if (entry.error) {
+      html += '<div class="dice-roller-entry" style="color:var(--error)">' + entry.text + '</div>';
+    } else {
+      var showBreakdown = entry.breakdown !== String(entry.total);
+      html += '<div class="dice-roller-entry">';
+      html += '<span style="color:var(--text-muted);font-size:0.75rem">' + esc(entry.expression) + '</span>';
+      if (showBreakdown) {
+        html += '<span style="color:var(--text-dim);margin:0 0.25rem">&rarr;</span>';
+        html += '<span style="font-family:var(--mono);font-size:0.8rem">' + esc(entry.breakdown) + '</span>';
+      }
+      html += '<span style="font-weight:700;color:var(--accent);font-size:0.9rem;margin-left:0.25rem">= ' + entry.total + '</span>';
+      html += '</div>';
+    }
+  }
+  container.innerHTML = html;
 }
 
 // ═══════════════════════════════════════════════════════════════

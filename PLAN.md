@@ -417,6 +417,22 @@ New optional fields on ad-hoc combatants: `hpMax` (number), `currentHp` (number)
 ### Backward Compatible
 Existing ad-hoc combatants in saved combats have no `hpMax` - no HP controls shown, no HP bar. No migration needed.
 
+### Phase 5.3 - General-Purpose Dice Roller
+
+"Roll Dice" button centered in toolbar opens a modal for rolling arbitrary dice expressions.
+
+#### Parser
+Recursive descent with operator precedence. Grammar: `expression = term ((+|-) term)*`, `term = factor ((*|/) factor)*`, `factor = '(' expression ')' | NUMBER? 'd' NUMBER | NUMBER`. Whitespace stripped before parsing. Adv/dis/advantage/disadvantage suffix extracted first (case-insensitive). Division uses `Math.floor`. Safety cap 1000 dice per group.
+
+#### Display
+Each dice group shows individual rolls (2-10 dice) or sum-in-parens (11+). Single die shows just the value. Pure-number arithmetic collapses to computed value. 1d20 with adv/dis shows both rolls and pick.
+
+#### Modal
+Input + Roll button, results area (newest first, max 50), Clear + Close buttons. Enter to roll, Escape to close, click-outside to close. Input stays after rolling (selected for quick replacement). History persists across modal close/reopen (ephemeral per session).
+
+#### New Functions
+`parseDiceExpression()`, `evalDiceNode()`, `rollDiceExpression()`, `showDiceRoller()`, `doDiceRoll()`, `renderDiceRollerResults()`. Global: `diceRollerHistory[]`.
+
 ## Future Phases
 
 ### Phase 6 - 5etools Importer
