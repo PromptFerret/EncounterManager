@@ -433,15 +433,48 @@ Input + Roll button, results area (newest first, max 50), Clear + Close buttons.
 #### New Functions
 `parseDiceExpression()`, `evalDiceNode()`, `rollDiceExpression()`, `showDiceRoller()`, `doDiceRoll()`, `renderDiceRollerResults()`. Global: `diceRollerHistory[]`.
 
+### Phase 6 - Refactor
+
+Code quality pass. The codebase was built incrementally across Phases 1-5.3 and accumulated technical debt. This phase cleans it up without changing any user-facing behavior.
+
+#### 6.1 - Unify Dice Engines
+Remove old `rollDice()` (simple NdN+M regex). Adapt all ~30 combat call sites to use the new recursive descent parser (`parseDiceExpression`/`evalDiceNode`). Single dice engine for everything.
+
+#### 6.2 - Consolidate Global State
+Replace 17 top-level variables with organized objects:
+- `editState = { mode, selected, lockedTemplateId, formData, visible, rawTemplate, formSnapshot, conflicts }`
+- Group form state: `formState = { mode, data, savedSnapshot }`
+- Keep `state` (persistent) and `activeCombatId`/`autoExpandedId` (preferences) as-is
+
+#### 6.3 - var to const/let Sweep
+Replace all ~216 `var` declarations with `const` or `let`. Use `const` by default, `let` only when reassigned.
+
+#### 6.4 - Extract Render Helpers
+Deduplicate repeated rendering patterns:
+- `renderHpBar(current, max, temp)` - used in monster rows, ad-hoc rows, detail panels (3 copies)
+- `renderCopyButton(text, label)` - used 7+ times
+- `createModal(id, title, bodyHtml, buttons)` - used in add combatant, dice roller, import dialogs (3+ copies)
+- `renderFormField(label, inputHtml)` - unify 3 different form field patterns
+
+#### 6.5 - Break Up Mega-Functions
+Split the 4 largest functions into focused sub-functions:
+- `renderActiveCombat()` (195 lines) → `renderCombatBar()`, `renderCombatInfo()`, `renderCombatantRows()`
+- `renderCombatantDetail()` (357 lines) → `renderMonsterDetail()`, `renderPlayerDetail()`, `renderAdhocDetail()`, `renderConditionsSection()`, `renderTacticsAccordion()`
+- `renderTemplateForm()` (308 lines) → extract `renderAbilityGrid()`, `renderSaveGrid()`, `renderSkillGrid()`, `renderAttackSection()`, `renderFeatureSection()`
+- `renderEditOverrideForm()` (217 lines) → reuse the same extracted helpers with edit/revert wrappers
+
+#### 6.6 - Null Guards and Error Handling
+Add guards to combat accessors. `getActiveCombat().combatants[idx]` appears in many places without null checks. Add early returns to prevent crashes on bad state.
+
 ## Future Phases
 
-### Phase 6 - 5etools Importer
+### Phase 7 - 5etools Importer
 
 #### Importer Architecture Pattern (applies to all future importers)
 
 All importers follow the same pattern:
 1. **Pure converter function**: `importXxx(json) → template[]` - takes parsed JSON, returns array of our template objects. No side effects, no DOM, no state mutation.
-2. **Format detection**: `doImportMonster()` currently only handles `.squishtext` files. For Phase 5+, update it to also accept `.json` files AND clipboard paste. Detection order: try SquishText decompress first → if that fails, try JSON.parse → if valid JSON, detect which format (our native format has `version` + `templates`, 5etools has `monster` array or top-level 5etools fields like `str`/`dex`/`ac` as array).
+2. **Format detection**: `doImportMonster()` currently only handles `.squishtext` files. For Phase 7+, update it to also accept `.json` files AND clipboard paste. Detection order: try SquishText decompress first → if that fails, try JSON.parse → if valid JSON, detect which format (our native format has `version` + `templates`, 5etools has `monster` array or top-level 5etools fields like `str`/`dex`/`ac` as array).
 3. **Input methods**: File upload (`.squishtext`, `.json`) AND paste textarea. Users copy JSON from 5etools via clipboard - paste is the primary UX for external imports.
 4. **Smart merge**: Same ID-based dedup as existing import. Imported templates get new `uuid()` IDs (since external formats don't use our IDs).
 5. **Status reporting**: Show count of imported vs skipped (by name dedup for external formats since they have no IDs - dedup by name to avoid importing the same monster twice).
@@ -703,13 +736,13 @@ Detection and parsing:
 - `initiative.advantageMode: "adv"` → set `initAdvantage: true`
 - `initiative` as plain number → use as flat init bonus directly
 
-### Phase 7 - CritterDB Importer
+### Phase 8 - CritterDB Importer
 - Discovery: investigate CritterDB JSON export format
 - Data mapping: map CritterDB fields to canonical template schema
 - Pure function: `importCritterDB(json) → template[]`
 - UI: integrate into Import Monster modal
 
-### Phase 8 - Bestiary Builder Importer
+### Phase 9 - Bestiary Builder Importer
 - Discovery: investigate Bestiary Builder JSON export format
 - Data mapping: map fields to canonical template schema
 - Pure function: `importBestiaryBuilder(json) → template[]`
