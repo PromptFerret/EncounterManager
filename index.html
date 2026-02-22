@@ -72,10 +72,9 @@
     border-bottom: 1px solid var(--border);
     background: var(--surface);
     flex-wrap: wrap;
-    position: relative;
   }
   .toolbar .sep { width: 1px; height: 1.5rem; background: var(--border); margin: 0 0.25rem; }
-  .toolbar .spacer { flex: 1; }
+  .toolbar .spacer { flex: 1; min-width: 0.5rem; }
 
   button {
     padding: 0.5rem 1rem;
@@ -933,7 +932,7 @@
   /* ── Responsive ── */
   @supports (height: 100dvh) { body { height: 100dvh; } }
   @media (max-width: 640px) {
-    .toolbar { flex-wrap: wrap; }
+    .toolbar .sep { display: none; }
     .form-grid.cols-3,
     .form-grid.cols-4 { grid-template-columns: 1fr 1fr; }
     .form-grid.cols-6 { grid-template-columns: repeat(3, 1fr); }
@@ -967,8 +966,8 @@
   <button class="btn-toggle" id="navParties" onclick="switchView('parties')">Parties</button>
   <button class="btn-toggle" id="navEncounters" onclick="switchView('encounters')">Encounters</button>
   <button class="btn-toggle" id="navCombat" onclick="activeCombatId=null;switchView('combat')">Combat</button>
-  <button class="btn-toggle" onclick="showDiceRoller()" style="position:absolute;left:50%;transform:translateX(-50%)">Roll Dice</button>
   <div class="spacer"></div>
+  <button class="btn-toggle" onclick="showDiceRoller()">Roll Dice</button>
   <button class="btn-toggle" onclick="showImportDialog()" title="Load backup">Load Backup</button>
   <button class="btn-toggle" onclick="exportData()" title="Save backup">Save Backup</button>
   <div class="sep"></div>
