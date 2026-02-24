@@ -1914,6 +1914,7 @@ function renderTemplateForm() {
   // ── Saving Throws ──
   html += '<div class="form-section"><div class="form-section-title">Saving Throws</div>';
   d.savingThrows.forEach((st, i) => {
+    html += '<div class="card" style="padding:0.6rem 0.75rem;margin-bottom:0.4rem">';
     html += '<div class="dyn-row">';
     html += '<select onchange="formState.data.savingThrows[' + i + '].ability=this.value" style="width:120px">';
     ABILITIES.forEach(ab => {
@@ -1923,6 +1924,7 @@ function renderTemplateForm() {
     html += '<input type="number" value="' + st.bonus + '" onchange="formState.data.savingThrows[' + i + '].bonus=+this.value" style="width:60px" placeholder="+0">';
     html += '<button class="btn-remove" onclick="formState.data.savingThrows.splice(' + i + ',1);renderTemplateForm()">×</button>';
     html += '</div>';
+    html += '</div>';
   });
   html += '<button class="btn-add-row" onclick="formState.data.savingThrows.push({ability:\'str\',bonus:0});renderTemplateForm()">+ Add Save</button>';
   html += '</div>';
@@ -1930,6 +1932,7 @@ function renderTemplateForm() {
   // ── Skills ──
   html += '<div class="form-section"><div class="form-section-title">Skills</div>';
   d.skills.forEach((sk, i) => {
+    html += '<div class="card" style="padding:0.6rem 0.75rem;margin-bottom:0.4rem">';
     html += '<div class="dyn-row">';
     html += '<select onchange="formState.data.skills[' + i + '].name=this.value" style="width:150px">';
     SKILLS.forEach(s => {
@@ -1938,6 +1941,7 @@ function renderTemplateForm() {
     html += '</select>';
     html += '<input type="number" value="' + sk.bonus + '" onchange="formState.data.skills[' + i + '].bonus=+this.value" style="width:60px" placeholder="+0">';
     html += '<button class="btn-remove" onclick="formState.data.skills.splice(' + i + ',1);renderTemplateForm()">×</button>';
+    html += '</div>';
     html += '</div>';
   });
   html += '<button class="btn-add-row" onclick="formState.data.skills.push({name:\'Perception\',bonus:0});renderTemplateForm()">+ Add Skill</button>';
@@ -2013,23 +2017,23 @@ function renderTemplateForm() {
 
   // ── Features ──
   html += '<div class="form-section"><div class="form-section-title">Features & Abilities</div>';
-  if (d.features.length > 0) {
-    html += '<div class="dyn-header">';
-    html += '<span class="dyn-label" style="flex:2">Name</span>';
-    html += '<span class="dyn-label" style="width:100px">Recharge</span>';
-    html += '<span class="dyn-label" style="width:55px">Uses</span>';
-    html += '<span style="width:30px"></span>';
-    html += '</div>';
-  }
   d.features.forEach((f, i) => {
-    html += '<div class="dyn-row" style="flex-direction:column">';
-    html += '<div style="display:flex;gap:0.4rem;width:100%">';
+    html += '<div class="card" style="padding:0.6rem 0.75rem;margin-bottom:0.4rem">';
+    if (i === 0) {
+      html += '<div class="dyn-header">';
+      html += '<span class="dyn-label" style="flex:2">Name</span>';
+      html += '<span class="dyn-label" style="width:100px">Recharge</span>';
+      html += '<span class="dyn-label" style="width:55px">Uses</span>';
+      html += '<span style="width:30px"></span>';
+      html += '</div>';
+    }
+    html += '<div class="dyn-row" style="margin-bottom:0.3rem">';
     html += '<input type="text" value="' + esc(f.name) + '" onchange="formState.data.features[' + i + '].name=this.value" placeholder="Feature name" style="flex:2">';
     html += '<input type="text" value="' + esc(f.recharge || '') + '" onchange="formState.data.features[' + i + '].recharge=this.value||null" placeholder="5-6" style="width:100px">';
     html += '<input type="number" value="' + (f.usesMax || '') + '" onchange="formState.data.features[' + i + '].usesMax=+this.value||null;formState.data.features[' + i + '].uses=+this.value||null" placeholder="#" style="width:55px">';
     html += '<button class="btn-remove" onclick="formState.data.features.splice(' + i + ',1);renderTemplateForm()">×</button>';
     html += '</div>';
-    html += '<textarea onchange="formState.data.features[' + i + '].desc=this.value" placeholder="Description..." style="width:100%">' + esc(f.desc) + '</textarea>';
+    html += '<div class="dyn-row"><textarea onchange="formState.data.features[' + i + '].desc=this.value" placeholder="Description..." style="width:100%">' + esc(f.desc) + '</textarea></div>';
     html += '</div>';
   });
   html += '<button class="btn-add-row" onclick="formState.data.features.push({name:\'\',desc:\'\',recharge:null,uses:null,usesMax:null});renderTemplateForm()">+ Add Feature</button>';
@@ -2041,44 +2045,44 @@ function renderTemplateForm() {
   html += formField('Actions/Round', 'number', d.legendaryActionBudget, 'formState.data.legendaryActionBudget=+this.value');
   html += formField('Resistances', 'number', d.legendaryResistances, 'formState.data.legendaryResistances=+this.value');
   html += '</div>';
-  if (d.legendaryActionBudget > 0 || d.legendaryActions.length > 0) {
-    html += '<div style="margin-top:0.5rem">';
-    if (d.legendaryActions.length > 0) {
+  html += '<div style="margin-top:0.5rem">';
+  d.legendaryActions.forEach((la, i) => {
+    html += '<div class="card" style="padding:0.6rem 0.75rem;margin-bottom:0.4rem">';
+    if (i === 0) {
       html += '<div class="dyn-header">';
       html += '<span class="dyn-label" style="flex:2">Name</span>';
       html += '<span class="dyn-label" style="width:55px">Cost</span>';
       html += '<span style="width:30px"></span>';
       html += '</div>';
     }
-    d.legendaryActions.forEach((la, i) => {
-      html += '<div class="dyn-row" style="flex-direction:column">';
-      html += '<div style="display:flex;gap:0.4rem;width:100%">';
-      html += '<input type="text" value="' + esc(la.name) + '" onchange="formState.data.legendaryActions[' + i + '].name=this.value" placeholder="Action name" style="flex:2">';
-      html += '<input type="number" value="' + la.cost + '" onchange="formState.data.legendaryActions[' + i + '].cost=+this.value" placeholder="#" style="width:55px">';
-      html += '<button class="btn-remove" onclick="formState.data.legendaryActions.splice(' + i + ',1);renderTemplateForm()">×</button>';
-      html += '</div>';
-      html += '<textarea onchange="formState.data.legendaryActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%">' + esc(la.desc) + '</textarea>';
-      html += '</div>';
-    });
-    html += '<button class="btn-add-row" onclick="formState.data.legendaryActions.push({name:\'\',cost:1,desc:\'\'});renderTemplateForm()">+ Add Legendary Action</button>';
+    html += '<div class="dyn-row" style="margin-bottom:0.3rem">';
+    html += '<input type="text" value="' + esc(la.name) + '" onchange="formState.data.legendaryActions[' + i + '].name=this.value" placeholder="Action name" style="flex:2">';
+    html += '<input type="number" value="' + la.cost + '" onchange="formState.data.legendaryActions[' + i + '].cost=+this.value" placeholder="#" style="width:55px">';
+    html += '<button class="btn-remove" onclick="formState.data.legendaryActions.splice(' + i + ',1);renderTemplateForm()">×</button>';
     html += '</div>';
-  }
+    html += '<div class="dyn-row"><textarea onchange="formState.data.legendaryActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%">' + esc(la.desc) + '</textarea></div>';
+    html += '</div>';
+  });
+  html += '<button class="btn-add-row" onclick="formState.data.legendaryActions.push({name:\'\',cost:1,desc:\'\'});renderTemplateForm()">+ Add Legendary Action</button>';
+  html += '</div>';
   html += '</div>';
 
   // ── Lair Actions ──
   html += '<div class="form-section"><div class="form-section-title">Lair Actions</div>';
   if (d.lairActions && d.lairActions.length > 0) {
-    html += '<div class="dyn-header">';
-    html += '<span class="dyn-label" style="flex:2">Name</span>';
-    html += '<span style="width:30px"></span>';
-    html += '</div>';
     d.lairActions.forEach((la, i) => {
-      html += '<div class="dyn-row" style="flex-direction:column">';
-      html += '<div style="display:flex;gap:0.4rem;width:100%">';
+      html += '<div class="card" style="padding:0.6rem 0.75rem;margin-bottom:0.4rem">';
+      if (i === 0) {
+        html += '<div class="dyn-header">';
+        html += '<span class="dyn-label" style="flex:2">Name</span>';
+        html += '<span style="width:30px"></span>';
+        html += '</div>';
+      }
+      html += '<div class="dyn-row" style="margin-bottom:0.3rem">';
       html += '<input type="text" value="' + esc(la.name) + '" onchange="formState.data.lairActions[' + i + '].name=this.value" placeholder="Lair action name" style="flex:2">';
       html += '<button class="btn-remove" onclick="formState.data.lairActions.splice(' + i + ',1);renderTemplateForm()">×</button>';
       html += '</div>';
-      html += '<textarea onchange="formState.data.lairActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%">' + esc(la.desc || '') + '</textarea>';
+      html += '<div class="dyn-row"><textarea onchange="formState.data.lairActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%">' + esc(la.desc || '') + '</textarea></div>';
       html += '</div>';
     });
   }
@@ -2517,6 +2521,8 @@ function addPlayerToParty() {
   if (!name) return;
   if (!formState.data.players.includes(name)) formState.data.players.push(name);
   renderPartyForm();
+  const refocused = document.getElementById('newPlayerInput');
+  if (refocused) refocused.focus();
 }
 
 function removePlayerFromParty(idx) {
@@ -3407,6 +3413,7 @@ function renderEditOverrideForm() {
   html += '<div class="form-section"><div class="form-section-title">Saving Throws</div>';
   d.savingThrows.forEach(function(st, i) {
     const itemMod = isSaveItemModified(i);
+    html += '<div class="card" style="padding:0.6rem 0.75rem;margin-bottom:0.4rem">';
     html += '<div class="dyn-row">';
     html += '<select onchange="editState.formData.savingThrows[' + i + '].ability=this.value;renderEditOverrideForm()" style="width:120px">';
     ABILITIES.forEach(function(ab) {
@@ -3416,6 +3423,7 @@ function renderEditOverrideForm() {
     html += '<input type="number" value="' + st.bonus + '" onchange="editState.formData.savingThrows[' + i + '].bonus=+this.value;renderEditOverrideForm()" style="width:60px" placeholder="+0"' + (itemMod ? ' class="edit-field-modified"' : '') + '>';
     if (itemMod) html += '<button class="btn-revert" onclick="revertSaveItem(' + i + ')" title="Revert to template">↩</button>';
     html += '<button class="btn-remove" onclick="editState.formData.savingThrows.splice(' + i + ',1);renderEditOverrideForm()">×</button>';
+    html += '</div>';
     html += '</div>';
   });
   // Show deleted saves (in template but not in editState.formData) with restore buttons
@@ -3433,6 +3441,7 @@ function renderEditOverrideForm() {
   html += '<div class="form-section"><div class="form-section-title">Skills</div>';
   d.skills.forEach(function(sk, i) {
     const itemMod = isSkillItemModified(i);
+    html += '<div class="card" style="padding:0.6rem 0.75rem;margin-bottom:0.4rem">';
     html += '<div class="dyn-row">';
     html += '<select onchange="editState.formData.skills[' + i + '].name=this.value;renderEditOverrideForm()" style="width:150px">';
     SKILLS.forEach(function(s) {
@@ -3442,6 +3451,7 @@ function renderEditOverrideForm() {
     html += '<input type="number" value="' + sk.bonus + '" onchange="editState.formData.skills[' + i + '].bonus=+this.value;renderEditOverrideForm()" style="width:60px" placeholder="+0"' + (itemMod ? ' class="edit-field-modified"' : '') + '>';
     if (itemMod) html += '<button class="btn-revert" onclick="revertSkillItem(' + i + ')" title="Revert to template">↩</button>';
     html += '<button class="btn-remove" onclick="editState.formData.skills.splice(' + i + ',1);renderEditOverrideForm()">×</button>';
+    html += '</div>';
     html += '</div>';
   });
   // Show deleted skills (in template but not in editState.formData) with restore buttons
@@ -3516,8 +3526,8 @@ function renderEditOverrideForm() {
   html += '<div class="form-section"><div class="form-section-title">Features & Abilities</div>';
   d.features.forEach(function(f, i) {
     const ffp = 'features.' + i;
-    html += '<div class="dyn-row" style="flex-direction:column">';
-    html += '<div style="display:flex;gap:0.4rem;width:100%">';
+    html += '<div class="card" style="padding:0.6rem 0.75rem;margin-bottom:0.4rem">';
+    html += '<div class="dyn-row" style="margin-bottom:0.3rem">';
     html += '<input type="text" value="' + esc(editVal(f.name, ffp + '.name')) + '" onchange="editState.formData.features[' + i + '].name=this.value" placeholder="Feature name" style="flex:2"' + editFieldAttr(ffp + '.name') + '>';
     html += editRevertBtn(ffp + '.name');
     html += '<input type="text" value="' + esc(editVal(f.recharge || '', ffp + '.recharge')) + '" onchange="editState.formData.features[' + i + '].recharge=this.value||null" placeholder="5-6" style="width:100px"' + editFieldAttr(ffp + '.recharge') + '>';
@@ -3525,8 +3535,9 @@ function renderEditOverrideForm() {
     html += '<input type="number" value="' + editVal(f.usesMax || '', ffp + '.usesMax') + '" onchange="editState.formData.features[' + i + '].usesMax=+this.value||null" placeholder="#" style="width:55px"' + editFieldAttr(ffp + '.usesMax') + '>';
     html += editRevertBtn(ffp + '.usesMax');
     html += '</div>';
-    html += '<textarea onchange="editState.formData.features[' + i + '].desc=this.value" placeholder="Description..." style="width:100%"' + editFieldAttr(ffp + '.desc') + '>' + esc(editVal(f.desc, ffp + '.desc')) + '</textarea>';
+    html += '<div class="dyn-row"><textarea onchange="editState.formData.features[' + i + '].desc=this.value" placeholder="Description..." style="width:100%"' + editFieldAttr(ffp + '.desc') + '>' + esc(editVal(f.desc, ffp + '.desc')) + '</textarea>';
     html += editRevertBtn(ffp + '.desc');
+    html += '</div>';
     html += '</div>';
   });
   html += '</div>';
@@ -3537,23 +3548,28 @@ function renderEditOverrideForm() {
   html += editField('Actions/Round', 'number', d.legendaryActionBudget, 'editState.formData.legendaryActionBudget=+this.value', 'legendaryActionBudget');
   html += editField('Resistances', 'number', d.legendaryResistances, 'editState.formData.legendaryResistances=+this.value', 'legendaryResistances');
   html += '</div>';
-  if (d.legendaryActionBudget > 0 || d.legendaryActions.length > 0) {
-    html += '<div style="margin-top:0.5rem">';
-    d.legendaryActions.forEach(function(la, i) {
-      const lfp = 'legendaryActions.' + i;
-      html += '<div class="dyn-row" style="flex-direction:column">';
-      html += '<div style="display:flex;gap:0.4rem;width:100%">';
-      html += '<input type="text" value="' + esc(editVal(la.name, lfp + '.name')) + '" onchange="editState.formData.legendaryActions[' + i + '].name=this.value" placeholder="Action name" style="flex:2"' + editFieldAttr(lfp + '.name') + '>';
-      html += editRevertBtn(lfp + '.name');
-      html += '<input type="number" value="' + editVal(la.cost, lfp + '.cost') + '" onchange="editState.formData.legendaryActions[' + i + '].cost=+this.value" placeholder="#" style="width:55px"' + editFieldAttr(lfp + '.cost') + '>';
-      html += editRevertBtn(lfp + '.cost');
+  html += '<div style="margin-top:0.5rem">';
+  d.legendaryActions.forEach(function(la, i) {
+    const lfp = 'legendaryActions.' + i;
+    html += '<div class="card" style="padding:0.6rem 0.75rem;margin-bottom:0.4rem">';
+    if (i === 0) {
+      html += '<div class="dyn-header">';
+      html += '<span class="dyn-label" style="flex:2">Name</span>';
+      html += '<span class="dyn-label" style="width:55px">Cost</span>';
       html += '</div>';
-      html += '<textarea onchange="editState.formData.legendaryActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%"' + editFieldAttr(lfp + '.desc') + '>' + esc(editVal(la.desc, lfp + '.desc')) + '</textarea>';
-      html += editRevertBtn(lfp + '.desc');
-      html += '</div>';
-    });
+    }
+    html += '<div class="dyn-row" style="margin-bottom:0.3rem">';
+    html += '<input type="text" value="' + esc(editVal(la.name, lfp + '.name')) + '" onchange="editState.formData.legendaryActions[' + i + '].name=this.value" placeholder="Action name" style="flex:2"' + editFieldAttr(lfp + '.name') + '>';
+    html += editRevertBtn(lfp + '.name');
+    html += '<input type="number" value="' + editVal(la.cost, lfp + '.cost') + '" onchange="editState.formData.legendaryActions[' + i + '].cost=+this.value" placeholder="#" style="width:55px"' + editFieldAttr(lfp + '.cost') + '>';
+    html += editRevertBtn(lfp + '.cost');
     html += '</div>';
-  }
+    html += '<div class="dyn-row"><textarea onchange="editState.formData.legendaryActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%"' + editFieldAttr(lfp + '.desc') + '>' + esc(editVal(la.desc, lfp + '.desc')) + '</textarea>';
+    html += editRevertBtn(lfp + '.desc');
+    html += '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
   html += '</div>';
 
   // ── Lair Actions ──
@@ -3561,13 +3577,14 @@ function renderEditOverrideForm() {
   if (d.lairActions && d.lairActions.length > 0) {
     d.lairActions.forEach(function(la, i) {
       const lfp = 'lairActions.' + i;
-      html += '<div class="dyn-row" style="flex-direction:column">';
-      html += '<div style="display:flex;gap:0.4rem;width:100%">';
+      html += '<div class="card" style="padding:0.6rem 0.75rem;margin-bottom:0.4rem">';
+      html += '<div class="dyn-row" style="margin-bottom:0.3rem">';
       html += '<input type="text" value="' + esc(editVal(la.name, lfp + '.name')) + '" onchange="editState.formData.lairActions[' + i + '].name=this.value" placeholder="Lair action name" style="flex:1"' + editFieldAttr(lfp + '.name') + '>';
       html += editRevertBtn(lfp + '.name');
       html += '</div>';
-      html += '<textarea onchange="editState.formData.lairActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%"' + editFieldAttr(lfp + '.desc') + '>' + esc(editVal(la.desc, lfp + '.desc')) + '</textarea>';
+      html += '<div class="dyn-row"><textarea onchange="editState.formData.lairActions[' + i + '].desc=this.value" placeholder="Description..." style="width:100%"' + editFieldAttr(lfp + '.desc') + '>' + esc(editVal(la.desc, lfp + '.desc')) + '</textarea>';
       html += editRevertBtn(lfp + '.desc');
+      html += '</div>';
       html += '</div>';
     });
   }
@@ -6697,18 +6714,28 @@ function renderDiceRollerResults() {
 // ═══════════════════════════════════════════════════════════════
 
 function updateStorageInfo() {
-  if (!navigator.storage || !navigator.storage.estimate) return;
-  navigator.storage.estimate().then(est => {
-    const el = document.getElementById('storageInfo');
-    if (!el) return;
-    function fmt(b) {
-      if (b < 1024) return b + ' B';
-      if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
-      if (b < 1024 * 1024 * 1024) return (b / (1024 * 1024)).toFixed(1) + ' MB';
-      return (b / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
-    }
-    el.textContent = 'Storage: ' + fmt(est.usage || 0) + ' / ' + fmt(est.quota || 0);
-  }).catch(() => {});
+  const el = document.getElementById('storageInfo');
+  if (!el) return;
+  function fmt(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+    if (b < 1024 * 1024 * 1024) return (b / (1024 * 1024)).toFixed(1) + ' MB';
+    return (b / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+  }
+  // Measure actual app data size (not origin-wide estimate which includes browser cache)
+  var usage = 0;
+  for (var k of Object.keys(STORAGE_KEYS)) {
+    if (state[k] !== undefined) usage += new Blob([JSON.stringify(state[k])]).size;
+  }
+  if (navigator.storage && navigator.storage.estimate) {
+    navigator.storage.estimate().then(function(est) {
+      el.textContent = 'Storage: ' + fmt(usage) + ' / ' + fmt(est.quota || 0);
+    }).catch(function() {
+      el.textContent = 'Storage: ' + fmt(usage);
+    });
+  } else {
+    el.textContent = 'Storage: ' + fmt(usage);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════

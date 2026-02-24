@@ -935,13 +935,53 @@ New field on monster template:
 
 ## Future Phases
 
-### Phase 10 - CritterDB Importer
+### Phase 10 - Template Schema Enhancements
+
+Add new fields to monster templates to capture metadata commonly found in published stat blocks but currently missing from the schema. These fields improve the usefulness of shared templates (e.g., Discord community libraries) and reduce information loss during import/conversion.
+
+#### New Template Fields
+
+- `source` (string, optional): Publication reference (e.g., `"MM 2014 p166"`, `"Flee, Mortals! p127"`, `"TLotRR p152"`). Displayed on template card and in combat detail panel under the Tactics & Descriptions accordion. Included in markdown and image export.
+- `gear` (string, optional): Equipment carried by the creature (e.g., `"Dagger, Light Crossbow"`, `"chain shirt, shield, scimitar"`). Displayed on template card below speed. Included in markdown and image export. Informational only — armor/weapons are already reflected in AC, attacks, etc.
+
+#### Completed
+
+- Remove legendary action conditional gate: always show the "+ Add Legendary Action" button regardless of Actions/Round value (both template editor and combatant editor)
+- Add `.card` styling to form editor sections: saving throws, skills, features, legendary actions, lair actions (matching the existing attack card treatment) in both template and combatant editor forms
+- Fix storage indicator: measure actual app data size from serialized state instead of origin-wide `navigator.storage.estimate()` which includes browser cache and inflates on every reload. Quota still from storage estimate.
+- Party editor: refocus player name input after adding a player so users can type multiple names in quick succession without re-clicking
+
+#### Remaining Tasks
+
+- Add `source` and `gear` fields to `newTemplate()` defaults (empty strings)
+- Add inputs to monster template editor form (source: text input, gear: text input)
+- Display in monster list card (subtle, below existing metadata)
+- Display in combat detail panel (under stats or accordion)
+- Include in markdown export
+- Include in image export
+- Include in JSON export (already automatic since templates export as-is)
+- Update 5etools importer to populate `source` from `source`/`page` fields and `gear` from equipment entries if available
+- Update export filenames to include CR and source: `{name} - CR {cr} ({source}).{ext}`. Sanitize filesystem-invalid characters (`/` → `-`). Example: `Goblin Sniper - CR 1-2 (FM).squishtext`. Falls back to just `{name}.{ext}` if cr/source are empty.
+- Update MONSTER_FORMAT.md with new field documentation
+- Update MONSTER_TEMPLATES.md if needed
+- Backward compatible: missing fields treated as empty strings
+
+#### Phase 10 Data Changes
+New fields on monster template:
+```json
+{
+  "source": "Flee, Mortals! p127",
+  "gear": "Dagger, Light Crossbow"
+}
+```
+
+### Phase 11 - CritterDB Importer
 - Discovery: investigate CritterDB JSON export format
 - Data mapping: map CritterDB fields to canonical template schema
 - Pure function: `importCritterDB(json) → template[]`
 - UI: integrate into Import Monster modal
 
-### Phase 11 - Bestiary Builder Importer
+### Phase 12 - Bestiary Builder Importer
 - Discovery: investigate Bestiary Builder JSON export format
 - Data mapping: map fields to canonical template schema
 - Pure function: `importBestiaryBuilder(json) → template[]`
