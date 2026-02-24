@@ -1127,6 +1127,7 @@ function newTemplate() {
     features: [],
     legendaryActionBudget: 0, legendaryActions: [], legendaryResistances: 0,
     lairActions: [], // each: { name, desc }
+    source: '', gear: '',
     playerDescription: '', dmDescription: ''
   };
 }
@@ -1847,6 +1848,12 @@ function renderTemplateList() {
       html += '<button class="btn-sm btn-danger" onclick="deleteTemplate(\'' + t.id + '\')">Delete</button>';
       html += '</div></div>';
       html += '<div class="card-meta">' + meta.map(m => '<span>' + esc(m) + '</span>').join('') + '</div>';
+      if (t.source || t.gear) {
+        var extra = [];
+        if (t.source) extra.push(t.source);
+        if (t.gear) extra.push(t.gear);
+        html += '<div style="font-size:0.7rem;color:var(--muted);margin-top:0.2rem">' + esc(extra.join(' · ')) + '</div>';
+      }
       html += '</div>';
     });
   }
@@ -1897,6 +1904,10 @@ function renderTemplateForm() {
   html += formField('CR', 'text', d.cr, 'formState.data.cr=this.value', '1/4');
   html += formField('Init Bonus', 'number', d.initBonus, 'formState.data.initBonus=+this.value');
   html += '<div class="form-field"><label class="checkbox-label"><input type="checkbox" ' + (d.initAdvantage ? 'checked' : '') + ' onchange="formState.data.initAdvantage=this.checked"> Init Advantage</label></div>';
+  html += '</div>';
+  html += '<div class="form-grid cols-2" style="margin-top:0.5rem">';
+  html += formField('Source', 'text', d.source || '', 'formState.data.source=this.value', 'MM 2014 p166');
+  html += formField('Gear', 'text', d.gear || '', 'formState.data.gear=this.value', 'chain shirt, shield, scimitar');
   html += '</div></div>';
 
   // ── Ability Scores ──
@@ -3393,6 +3404,10 @@ function renderEditOverrideForm() {
   html += editField('CR', 'text', d.cr, 'editState.formData.cr=this.value', 'cr');
   html += editField('Init Bonus', 'number', d.initBonus, 'editState.formData.initBonus=+this.value', 'initBonus');
   html += '<div class="form-field"><div class="flex-row-tight"><label class="checkbox-label"><input type="checkbox" ' + (d.initAdvantage ? 'checked' : '') + ' onchange="editState.formData.initAdvantage=this.checked"' + editFieldAttr('initAdvantage') + '> Init Advantage</label>' + editRevertBtn('initAdvantage') + '</div></div>';
+  html += '</div>';
+  html += '<div class="form-grid cols-2" style="margin-top:0.5rem">';
+  html += editField('Source', 'text', d.source || '', 'editState.formData.source=this.value', 'source');
+  html += editField('Gear', 'text', d.gear || '', 'editState.formData.gear=this.value', 'gear');
   html += '</div></div>';
 
   // ── Ability Scores ──
@@ -4038,10 +4053,12 @@ function renderMonsterDetail(c, idx, template) {
   // Right column: Reference + Roll
   html += '<div>';
 
-  // Speed & Senses
+  // Speed, Senses, Source, Gear
   html += '<div class="text-dim-sm" style="margin-bottom:0.4rem">';
   if (template.speed) html += 'Speed: ' + ovh(c, 'speed', esc(template.speed)) + '<br>';
   if (template.senses) html += 'Senses: ' + ovh(c, 'senses', esc(template.senses)) + '<br>';
+  if (template.source) html += 'Source: ' + esc(template.source) + '<br>';
+  if (template.gear) html += 'Gear: ' + esc(template.gear) + '<br>';
   html += '</div>';
 
   // Passives
@@ -5722,6 +5739,8 @@ function import5etools(json) {
       legendaryActions: parse5eLegendary(m.legendary),
       legendaryResistances: extractLegendaryResistances(m.trait),
       lairActions: [],
+      source: (m.source || '') + (m.page ? ' p' + m.page : ''),
+      gear: '',
       playerDescription: '',
       dmDescription: ''
     };
@@ -6046,6 +6065,8 @@ function templateToCanvas(t) {
   labelLine('Senses', sensesVal);
   if (t.languages) labelLine('Languages', t.languages);
   if (t.cr) labelLine('Challenge', t.cr);
+  if (t.gear) labelLine('Gear', t.gear);
+  if (t.source) labelLine('Source', t.source);
 
   // ── 5. Features ──
   // Categorize
@@ -6263,6 +6284,8 @@ function templateToMarkdown(t) {
 
   if (t.languages) lines.push('**Languages** ' + t.languages);
   if (t.cr) lines.push('**Challenge** ' + t.cr);
+  if (t.gear) lines.push('**Gear** ' + t.gear);
+  if (t.source) lines.push('**Source** ' + t.source);
   lines.push('');
   lines.push('---');
   lines.push('');
@@ -6457,7 +6480,16 @@ function switchExportMode(mode) {
 async function doExportMonster() {
   const t = state.templates.find(t => t.id === _exportTargetId);
   if (!t) { setStatus('Monster not found.', 'error'); return; }
-  const safeName = (t.name || 'monster').replace(/[^a-zA-Z0-9_-]/g, '_');
+  // Build filename: {name} - CR {cr} ({source}).{ext}, fallback to just {name}
+  let exportName = t.name || 'monster';
+  if (t.cr && t.source) {
+    exportName += ' - CR ' + t.cr + ' (' + t.source + ')';
+  } else if (t.cr) {
+    exportName += ' - CR ' + t.cr;
+  } else if (t.source) {
+    exportName += ' - ' + t.source;
+  }
+  const safeName = exportName.replace(/[\/\\:*?"<>|]/g, '-').replace(/-{2,}/g, '-');
 
   // Determine active mode
   let mode = 'em';

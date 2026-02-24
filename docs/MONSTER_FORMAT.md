@@ -104,6 +104,8 @@ The `templates` array can contain one or more monster templates. When importing,
   "legendaryActions": [],
   "legendaryResistances": 0,
   "lairActions": [],
+  "source": "MM 2014 p223",
+  "gear": "greataxe",
   "tactics": "",
   "playerDescription": "",
   "dmDescription": ""
@@ -326,6 +328,8 @@ Include trigger conditions in the `desc` text so the DM knows when the ability a
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `source` | string | Publication reference (e.g., `"MM 2014 p166"`, `"Flee, Mortals! p127"`). Displayed on monster card and in combat detail panel. Included in export filenames. |
+| `gear` | string | Equipment carried by the creature (e.g., `"chain shirt, shield, scimitar"`). Informational only - armor/weapons are already reflected in AC, attacks, etc. |
 | `tactics` | string | DM notes about how the monster fights. Shown in combat detail panel under the Tactics & Descriptions accordion. |
 | `playerDescription` | string | Flavor text - what players see (appearance, sounds, smells). Accessible during combat via the accordion with a Copy button. |
 | `dmDescription` | string | DM-only lore, SRD reference text, behavioral notes. Accessible during combat via the accordion with a Copy button. |
