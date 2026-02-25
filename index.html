@@ -437,6 +437,37 @@
   }
   .modal-toggle-group button:not(.active):hover { background: var(--surface2); }
 
+  /* ── Getting Started Modal ── */
+  .modal-getting-started { max-width: 540px; max-height: 90vh; overflow-y: auto; }
+  .getting-started-intro { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 0.25rem; }
+  .getting-started-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;
+    margin: 0.75rem 0;
+  }
+  .getting-started-card {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 0.75rem; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  }
+  .getting-started-card:hover { border-color: var(--accent); background: var(--surface2); }
+  .getting-started-card h3 { margin: 0 0 0.35rem; font-size: 0.85rem; color: var(--text); }
+  .getting-started-card p { margin: 0; font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; }
+  .getting-started-detail p { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; margin: 0.4rem 0; }
+  .getting-started-detail ol { margin: 0.5rem 0; padding-left: 1.25rem; }
+  .getting-started-detail li { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 0.35rem; }
+  .getting-started-back {
+    background: none; border: none; color: var(--accent); cursor: pointer;
+    font-size: 0.8rem; padding: 0; margin-bottom: 0.5rem;
+  }
+  .getting-started-back:hover { text-decoration: underline; }
+  .getting-started-footer {
+    margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid var(--border);
+    font-size: 0.7rem; color: var(--text-dim); text-align: center; line-height: 1.6;
+  }
+  .getting-started-footer a { color: var(--accent); text-decoration: none; }
+  @media (max-width: 500px) {
+    .getting-started-grid { grid-template-columns: 1fr; }
+  }
+
   /* ── Footer ── */
   .footer {
     padding: 0.4rem 1.5rem;
@@ -991,7 +1022,7 @@
 
 <div class="footer">
   <span><a href="https://promptferret.github.io" target="_blank">PromptFerret</a> &middot; <a href="https://promptferret.github.io/tools/" target="_blank">All Tools</a> &middot; <a href="https://promptferret.github.io/MarkdownSite/?chrome=false#../../EncounterManager/docs/INDEX" target="_blank">Docs</a></span>
-  <span><span id="storageInfo">Data stored in your browser</span></span>
+  <span><a href="javascript:void(0)" onclick="showGettingStarted()">Getting Started</a> &middot; <span id="storageInfo">Data stored in your browser</span></span>
   <span><a href="https://github.com/PromptFerret/EncounterManager/blob/main/LICENSE" target="_blank">MIT License</a> &middot; Vibe coded with <a href="https://docs.anthropic.com/en/docs/claude-code" target="_blank">Claude Code</a> &middot; No server required</span>
 </div>
 
@@ -3697,6 +3728,180 @@ function createModal(id, title, bodyHtml, opts) {
     document.addEventListener('keydown', handler);
   }
   return modal;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ── Getting Started ──
+// ═══════════════════════════════════════════════════════════════
+
+function isDataEmpty() {
+  return !state.templates.length && !state.encounters.length && !state.parties.length && !state.combats.length;
+}
+
+function showGettingStarted() {
+  var empty = isDataEmpty();
+  var html = '<p class="getting-started-intro">' +
+    'EncounterManager is your behind-the-screen assistant for 5th Edition combat. ' +
+    'It tracks initiative, HP, dice, and conditions so you can focus on telling the story. ' +
+    'You are still the DM -- it just handles the paperwork. Need to fudge a roll? Your secret is safe.</p>' +
+    '<p class="getting-started-intro">' +
+    'This is a DM tool, not a virtual tabletop. Players still control their own characters -- ' +
+    'you only track their initiative and AC here. Conditions are optional if you want a reminder for yourself. ' +
+    'Everything else stays at the table where it belongs.</p>' +
+    '<div class="getting-started-grid">' +
+      '<div class="getting-started-card" onclick="showGettingStartedDetail(\'monsters\')">' +
+        '<h3>Monsters</h3>' +
+        '<p>Create reusable stat blocks with attacks, features, and legendary actions. Import from 5etools or build from scratch.</p>' +
+      '</div>' +
+      '<div class="getting-started-card" onclick="showGettingStartedDetail(\'parties\')">' +
+        '<h3>Parties</h3>' +
+        '<p>List your player characters by name. Select a party when you start combat -- reuse them across any encounter.</p>' +
+      '</div>' +
+      '<div class="getting-started-card" onclick="showGettingStartedDetail(\'encounters\')">' +
+        '<h3>Encounters</h3>' +
+        '<p>Build reusable sets of monster groups. Select a party when you start combat.</p>' +
+      '</div>' +
+      '<div class="getting-started-card" onclick="showGettingStartedDetail(\'combat\')">' +
+        '<h3>Combat</h3>' +
+        '<p>Run the fight. Track initiative order, roll attacks, manage monster HP, and handle conditions and legendary actions.</p>' +
+      '</div>' +
+    '</div>';
+  if (empty) {
+    html += '<div style="text-align:center;margin:0.5rem 0">' +
+      '<button class="btn btn-action" onclick="loadSampleData()">Load Sample Data</button>' +
+      '<p style="font-size:0.7rem;color:var(--text-dim);margin:0.35rem 0 0">' +
+        'Loads a ready-made set of monsters, a party, an encounter, and an active combat so you can explore the tool right away.</p>' +
+      '</div>';
+  }
+  html += '<div class="getting-started-footer">' +
+    '<a href="https://promptferret.github.io/MarkdownSite/?chrome=false#../../EncounterManager/docs/INDEX" target="_blank">Read the full docs</a><br>' +
+    'You can reopen this anytime from the <strong>Getting Started</strong> link in the footer.</div>';
+  var modal = createModal('gettingStartedModal', 'Getting Started', html, { clickOutsideClose: true, escapeClose: true });
+  var content = modal.querySelector('.modal-content');
+  if (content) content.classList.add('modal-getting-started');
+}
+
+function showGettingStartedDetail(section) {
+  var modal = document.getElementById('gettingStartedModal');
+  if (!modal) return;
+  var content = modal.querySelector('.modal-content');
+  if (!content) return;
+  var details = {
+    monsters: {
+      title: 'Monsters',
+      view: 'templates',
+      cta: 'Go to Monsters',
+      html:
+        '<p>Monster templates are reusable stat blocks. Build one, then add it to any number of encounters.</p>' +
+        '<ol>' +
+          '<li>Go to the <strong>Monsters</strong> tab and click <strong>+ New Monster</strong></li>' +
+          '<li>Fill in the basics -- name, size, type, AC, HP, and ability scores</li>' +
+          '<li>Add attacks with hit bonus, damage dice, and reach or range</li>' +
+          '<li>Add features, legendary actions, and lair actions as needed</li>' +
+          '<li>Click <strong>Save</strong> -- your monster is ready to use in encounters</li>' +
+        '</ol>' +
+        '<p>You can also import monsters from <strong>5etools</strong> JSON using the Import Monster button, ' +
+        'or import <code>.squishtext</code> files shared by other DMs.</p>'
+    },
+    parties: {
+      title: 'Parties',
+      view: 'parties',
+      cta: 'Go to Parties',
+      html:
+        '<p>A party is a named list of player characters. You select which party to use when you start combat.</p>' +
+        '<ol>' +
+          '<li>Go to the <strong>Parties</strong> tab and click <strong>+ New Party</strong></li>' +
+          '<li>Name the party, then type each player name and click <strong>Add</strong></li>' +
+          '<li>Click <strong>Save</strong> -- your party is ready to use in any encounter</li>' +
+        '</ol>' +
+        '<p>AC and initiative are entered during combat, not here. Players track their own HP at the table. ' +
+        'You can create multiple parties for different groups or campaign arcs.</p>'
+    },
+    encounters: {
+      title: 'Encounters',
+      view: 'encounters',
+      cta: 'Go to Encounters',
+      html:
+        '<p>An encounter is a reusable set of monster groups. You choose which party faces them when you start combat.</p>' +
+        '<ol>' +
+          '<li>Go to the <strong>Encounters</strong> tab and click <strong>+ New Encounter</strong></li>' +
+          '<li>Name the encounter and add monster groups -- pick a template and set the count</li>' +
+          '<li>Click <strong>Save</strong>, then <strong>Close</strong> to return to the encounter list</li>' +
+          '<li>Click <strong>Combat</strong> on the encounter card and select a party</li>' +
+        '</ol>' +
+        '<p>Run the same encounter with any party as many times as you like. Each combat is its own session.</p>'
+    },
+    combat: {
+      title: 'Combat',
+      view: 'combat',
+      cta: 'Go to Combat',
+      html:
+        '<p>Once combat starts, EncounterManager handles the bookkeeping so you can focus on running the game.</p>' +
+        '<ol>' +
+          '<li>Monster initiatives are pre-rolled. Enter player initiatives, then review and adjust any values before starting</li>' +
+          '<li>The active combatant is highlighted. Click any combatant to expand their stat block</li>' +
+          '<li>Click <strong>Atk</strong> to roll to-hit (choose Disadvantage, Normal, or Advantage), then <strong>Dmg</strong> for damage (Normal or Crit)</li>' +
+          '<li>Use HP controls to apply damage, healing, or temp HP to monsters. Players manage their own HP at the table</li>' +
+          '<li>Click <strong>Next</strong> to advance to the next combatant</li>' +
+        '</ol>' +
+        '<p>Add conditions manually as needed -- round-based conditions auto-decrement at turn start. ' +
+        'Legendary action budgets reset each turn. Feature uses and legendary resistances are tracked with Use/Restore buttons. ' +
+        'Dice notation anywhere in descriptions is clickable.</p>'
+    }
+  };
+  var d = details[section];
+  if (!d) return;
+  content.innerHTML =
+    '<button class="getting-started-back" onclick="showGettingStarted()">&larr; Back</button>' +
+    '<div class="form-section-title" style="margin-bottom:0.75rem">' + d.title + '</div>' +
+    '<div class="getting-started-detail">' + d.html + '</div>' +
+    '<div style="display:flex;gap:0.5rem;margin-top:0.75rem">' +
+      '<button class="btn btn-action" onclick="document.getElementById(\'gettingStartedModal\').remove();switchView(\'' + d.view + '\')">' + d.cta + '</button>' +
+      '<button class="btn" onclick="showGettingStarted()">Back</button>' +
+    '</div>' +
+    '<div class="getting-started-footer">' +
+      '<a href="https://promptferret.github.io/MarkdownSite/?chrome=false#../../EncounterManager/docs/INDEX" target="_blank">Read the full docs</a><br>' +
+      'You can reopen this anytime from the <strong>Getting Started</strong> link in the footer.</div>';
+}
+
+// Sample data payload for "Load Sample Data" button
+var SAMPLE_DATA_PAYLOAD = '[SquishText] To decode, base64-decode the string below then inflate (deflate-raw). Or paste at https://promptferret.github.io/SquishText/\n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.ddd09d14';
+
+async function loadSampleData() {
+  if (!SAMPLE_DATA_PAYLOAD) {
+    setStatus('Sample data is not available yet.', 'error');
+    var m = document.getElementById('gettingStartedModal');
+    if (m) m.remove();
+    return;
+  }
+  try {
+    var decompressed = await decompress(SAMPLE_DATA_PAYLOAD);
+    var data = JSON.parse(decompressed);
+    var existingIds = new Set();
+    function mergeArray(existing, incoming) {
+      existing.forEach(function(item) { existingIds.add(item.id); });
+      var added = 0;
+      (incoming || []).forEach(function(item) {
+        if (!existingIds.has(item.id)) { existing.push(item); added++; }
+      });
+      existingIds.clear();
+      return added;
+    }
+    var added = 0;
+    added += mergeArray(state.templates, data.templates);
+    added += mergeArray(state.encounters, data.encounters);
+    added += mergeArray(state.parties, data.parties);
+    added += mergeArray(state.combats, data.combats);
+    save();
+    setStatus('Sample data loaded! ' + added + ' item' + (added !== 1 ? 's' : '') + ' added.', 'success');
+    render();
+    updateStorageInfo();
+    var m = document.getElementById('gettingStartedModal');
+    if (m) m.remove();
+  } catch (e) {
+    console.error('Failed to load sample data:', e);
+    setStatus('Failed to load sample data: ' + e.message, 'error');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -6836,6 +7041,7 @@ load().then(() => {
     render();
   }
   updateStorageInfo();
+  if (isDataEmpty()) showGettingStarted();
 });
 </script>
 

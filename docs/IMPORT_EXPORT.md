@@ -29,7 +29,7 @@ This means restoring a backup will never overwrite your current data. It only ad
 
 ### Exporting a Single Monster
 
-On the Monsters tab, each monster card has an **Export** button. Click it to download a `.squishtext` file. The filename includes the monster's name, CR, and source when available (e.g., `Minotaur - CR 3 (MM 2014 p77).squishtext`). If CR or source are not set, they are omitted from the filename.
+On the Monsters tab, each monster card has an **Export** button. Click it to download a `.squishtext` file. The filename includes the monster's name, CR, and source when available (e.g., `Goblin Boss - CR 1 (MM 2024 p143).squishtext`). If CR or source are not set, they are omitted from the filename.
 
 Share these files with other DMs, keep them as individual backups, or build a personal library outside the browser.
 

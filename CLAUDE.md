@@ -29,8 +29,8 @@ The file is ~5300+ lines. Rough section layout:
 
 | Section | Contents |
 |---------|----------|
-| CSS | Full theme, button classes, searchable select, modal overlay, combat list cards, condition/concentration chips, LA/LR badges, turn-notify pulse, attribute grid (`.attr-grid`, `.attr-btn`, `.attr-cell`, `.attr-sub`, `.save-btn`), skill grid (`.skill-grid`, `.skill-cell`), passive row (`.passive-row`), combat info header (`.combat-info`, `.combat-info-row`, `.combat-info-label`, `.combat-info-value`, `.combat-info-copy`), utility classes (`.flex-row`, `.flex-row-tight`, `.flex-row-end`, `.flex-col`, `.text-muted-sm`, `.text-dim-sm`, `.text-mono`, `.detail-label`), responsive breakpoints |
-| HTML | Header, toolbar (nav tabs + Save Backup/Load Backup/Import Monster buttons), status bar, 4 view containers, footer with storage indicator |
+| CSS | Full theme, button classes, searchable select, modal overlay, getting started modal (`.modal-getting-started`, `.getting-started-grid`, `.getting-started-card`, `.getting-started-detail`, `.getting-started-back`, `.getting-started-footer`, `.getting-started-intro`), combat list cards, condition/concentration chips, LA/LR badges, turn-notify pulse, attribute grid (`.attr-grid`, `.attr-btn`, `.attr-cell`, `.attr-sub`, `.save-btn`), skill grid (`.skill-grid`, `.skill-cell`), passive row (`.passive-row`), combat info header (`.combat-info`, `.combat-info-row`, `.combat-info-label`, `.combat-info-value`, `.combat-info-copy`), utility classes (`.flex-row`, `.flex-row-tight`, `.flex-row-end`, `.flex-col`, `.text-muted-sm`, `.text-dim-sm`, `.text-mono`, `.detail-label`), responsive breakpoints |
+| HTML | Header, toolbar (nav tabs + Save Backup/Load Backup/Import Monster buttons), status bar, 4 view containers, footer with Getting Started link + storage indicator |
 | Constants & State | `ABILITIES`, `CONDITIONS`, `SKILLS`, `SKILL_ABILITY_MAP`, `SIZES`, `STORAGE_KEYS`, `state`, `formState`, `editState`, `activeCombatId`, `getActiveCombat()`, `getCombatant()`, `load()`/`save()`, `uuid()`, `esc()`, `modStr()` |
 | Dice Engine | `rollDice(notation, opts)` (thin wrapper), `renderDiceText()`, `rollInlineDice()` (combat), `parseDiceExpression()`, `evalDiceNode()`, `rollDiceExpression()` (unified engine) |
 | Compression | CRC32, `compress()`, `decompress()` - SquishText-compatible, embedded for import/export |
@@ -44,6 +44,7 @@ The file is ~5300+ lines. Rough section layout:
 | Initiative Setup | `renderInitiativeSetup()`, `beginCombat()` |
 | Edit Mode (Combat Overrides) | `exitEditMode()`, `toggleEditMode()`, `toggleEditSelect()`, `openEditForm()`, `renderEditOverrideForm()`, `editField()`, `applyEditOverrides()`, `closeEditOverrides()`, `cancelEditOverrides()`, `editSingleCombatant()`, `ovh()` (override highlight wrapper), `isEditFormDirty()`, `editFormSnapshot`, conflict detection, field revert, per-item save/skill revert (`isSaveItemModified`, `revertSaveItem`, `restoreDeletedSave`, `isSkillItemModified`, `revertSkillItem`, `restoreDeletedSkill`) |
 | Render Helpers | `getCombatantHp(c, template)`, `renderHpBar(curHp, maxHp, tempHp)`, `createModal(id, title, bodyHtml, opts)` |
+| Getting Started | `isDataEmpty()`, `showGettingStarted()` (grid view modal), `showGettingStartedDetail(section)` (detail view), `loadSampleData()` (imports embedded squishtext payload via merge logic), `SAMPLE_DATA_PAYLOAD` (constant) |
 | Active Combat | `renderActiveCombat()` (orchestrator), `renderCombatBar()`, `renderCombatInfo()`, `renderCombatantRow()`, `renderCombatantDetail()` (router), `renderMonsterDetail()`, `renderPlayerDetail()`, `renderAdhocDetail()`, `showAddCombatantModal()` / `doAddCombatant()` |
 | Condition Tracking | `updateConditionFields()`, `toggleCustomCondInput()`, `addCondition()`, `removeCondition()` |
 | Concentration | `setConcentration()`, `dropConcentration()` |
@@ -58,7 +59,7 @@ The file is ~5300+ lines. Rough section layout:
 | 5etools Importer | `strip5eToolsTags()`, `flattenEntries()`, `parse5eSize/Type/Ac/Speed/Saves/Skills/Cr/Resist/Alignment/Initiative()`, `extractRechargeFromName()`, `parse5eActions()`, `parse5eLegendary()`, `parse5eSpellcasting()`, `extractLegendaryResistances()`, `import5etools()`, `detect5eToolsFormat()`, `profBonusFromCr()`, `SIZE_MAP` |
 | Import/Export | `exportData()` (Save Backup), `showImportDialog()` (Load Backup - direct file picker), `exportMonster()` (per-monster), `showImportMonsterDialog()` / `switchImportMode()` / `doImportMonster()` (Import Monster modal, toggle group) |
 | Storage Indicator | `updateStorageInfo()` - measures app data from serialized state keys, quota from `navigator.storage.estimate()`, auto-scales units (B/KB/MB/GB) |
-| Init | `load().then(() => { switchView(savedPref) or render(); updateStorageInfo(); })` |
+| Init | `load().then(() => { switchView(savedPref) or render(); updateStorageInfo(); if (isDataEmpty()) showGettingStarted(); })` |
 
 *Line numbers are approximate and shift as code is added.*
 
@@ -303,7 +304,7 @@ User input flows through `this.value` in onchange handlers (reads from DOM eleme
 - **Phase 8** (done): Export enhancements - markdown export (full stat block to clipboard), image export (canvas-rendered PNG download). Both include all template fields.
 - **Phase 9** (done): Attack descriptions (`desc` field on attacks for special effects text, inline clickable dice) and lair actions (`lairActions[]` array, reference-only display in combat, notification modal on combat start). 5etools importer updated for both.
 - **Phase 10** (done): Template schema enhancements - `source` and `gear` fields on templates, displayed in list/combat/export. Legendary action conditional gate removed (no longer requires Actions/Round to add actions). Card styling on saves/skills/features/legendary/lair sections. Storage indicator fixed (measures app data, not origin-wide). Party input refocus. Export filenames include CR and source.
-- **Phase 11** (planned): Getting Started modal - onboarding for new users. Auto-shows on empty state, reopenable from footer link. 2x2 card grid (Monsters/Parties/Encounters/Combat) with click-to-detail views. "Load Sample Data" button (empty state only) injects a prebuilt system with monsters, party, encounter, and active combat; stays on current tab after import. Uses `createModal()`, embedded squishtext payload, existing import merge logic.
+- **Phase 11** (done): Getting Started modal - onboarding for new users. Auto-shows on empty state, reopenable from footer link. 2x2 card grid (Monsters/Parties/Encounters/Combat) with click-to-detail views. "Load Sample Data" button (empty state only) imports embedded squishtext payload (ambush-at-thornhollow) via existing merge logic; stays on current tab after import. Docs updated: INDEX.md example data section, IMPORT_EXPORT.md export filename, MONSTER_FORMAT.md complete importable example with export wrapper.
 - **Phase 12+** (future): CritterDB, Bestiary Builder importers (each in own phase). See `PLAN.md` for details.
 
 ## Development Notes

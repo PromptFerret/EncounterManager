@@ -933,18 +933,16 @@ New field on monster template:
 { "lairActions": [{ "name": "Tremor", "desc": "Each creature within 60 ft..." }] }
 ```
 
-## Future Phases
-
-### Phase 10 - Template Schema Enhancements
+## Phase 10 - Template Schema Enhancements (done)
 
 Add new fields to monster templates to capture metadata commonly found in published stat blocks but currently missing from the schema. These fields improve the usefulness of shared templates (e.g., Discord community libraries) and reduce information loss during import/conversion.
 
-#### New Template Fields
+### New Template Fields
 
 - `source` (string, optional): Publication reference (e.g., `"MM 2014 p166"`, `"Flee, Mortals! p127"`, `"TLotRR p152"`). Displayed on template card and in combat detail panel under the Tactics & Descriptions accordion. Included in markdown and image export.
 - `gear` (string, optional): Equipment carried by the creature (e.g., `"Dagger, Light Crossbow"`, `"chain shirt, shield, scimitar"`). Displayed on template card below speed. Included in markdown and image export. Informational only — armor/weapons are already reflected in AC, attacks, etc.
 
-#### Completed
+### Completed
 
 - Remove legendary action conditional gate: always show the "+ Add Legendary Action" button regardless of Actions/Round value (both template editor and combatant editor)
 - Add `.card` styling to form editor sections: saving throws, skills, features, legendary actions, lair actions (matching the existing attack card treatment) in both template and combatant editor forms
@@ -962,7 +960,7 @@ Add new fields to monster templates to capture metadata commonly found in publis
 - Update MONSTER_TEMPLATES.md, IMPORT_EXPORT.md, CLAUDE.md docs
 - Backward compatible: missing fields treated as empty strings
 
-#### Phase 10 Data Changes
+### Phase 10 Data Changes
 New fields on monster template:
 ```json
 {
@@ -971,31 +969,31 @@ New fields on monster template:
 }
 ```
 
-### Phase 11 - Getting Started Modal
+## Phase 11 - Getting Started Modal (done)
 
 New users landing on EncounterManager see an empty screen with no guidance. This phase adds an onboarding modal that orients new users, explains the workflow, and optionally loads sample data so they can explore a working system immediately.
 
-#### Behavior
+### Behavior
 
 - **Auto-show on empty state**: Modal appears on load when all data arrays are empty (no templates, no encounters, no parties, no combats). No preference flag - if data is empty, show it.
 - **Reopenable anytime**: A "Getting Started" link in the footer (next to storage indicator) opens the modal on demand.
 - **"Load Sample Data" button**: Only visible when the system has no data. Hidden when reopened on a system that already has content.
 - **Reminder text**: Both grid view and detail views include: "You can reopen this anytime from the Getting Started link in the footer."
 
-#### Modal Layout
+### Modal Layout
 
 **Grid view (default):** Top info panel with brief overview, then a 2x2 card grid (Monsters, Parties, Encounters, Combat). Each card has a title and 1-2 sentence summary. Below the grid: "Load Sample Data" button (if empty), docs link, footer reminder.
 
 **Detail view (on card click):** Clicking a card replaces modal content with a detail page for that section. Back arrow returns to grid. "Go to [Tab Name]" button closes modal and switches to that tab. Each detail page is self-contained with step-by-step guidance, tips, and a docs link for more depth.
 
-#### Sample Data
+### Sample Data
 
 - Squishtext payload provided by user, embedded in code
 - Contains monsters, a party, an encounter, and an active combat in round 1
 - Imported via existing merge logic (same as Load Backup)
 - After import: modal closes, user stays on their current tab to explore at their own pace
 
-#### Implementation
+### Implementation
 
 - `showGettingStarted()` - renders modal with grid view, checks empty state for sample data button
 - `showGettingStartedDetail(section)` - replaces modal content with detail view
@@ -1006,12 +1004,14 @@ New users landing on EncounterManager see an empty screen with no guidance. This
 - Init hook: in `load().then(...)`, check `isDataEmpty()` and call `showGettingStarted()` if true
 - CSS: `.getting-started-grid`, `.getting-started-card`, `.getting-started-detail`, `.getting-started-back`
 
-#### Files Modified
+### Files Modified
 
 - `index.html` - CSS, HTML footer link, JS functions, init hook
 - `CLAUDE.md` - phase status, code map updates
 - `PLAN.md` - this entry
 - `docs/INDEX.md` - mention Getting Started modal in quick start
+
+## Future Phases
 
 ### Phase 12 - CritterDB Importer
 - Discovery: investigate CritterDB JSON export format

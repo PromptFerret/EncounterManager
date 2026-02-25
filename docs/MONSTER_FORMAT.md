@@ -12,103 +12,104 @@ The fastest way to see the format in action:
 2. Open the `.squishtext` file in [SquishText](https://promptferret.github.io/SquishText/) to decompress
 3. You will see the JSON wrapper and the template object inside
 
-## Export Wrapper
+## Complete Example
 
-Exported `.squishtext` files contain JSON wrapped in an envelope:
+This is a complete, importable file. The outer envelope (`version`, `exported`, `templates` array) is required -- EncounterManager reads the `templates` array and adds each template to your library, skipping duplicates by ID.
 
 ```json
 {
   "version": 1,
-  "exported": "2026-02-20T12:00:00.000Z",
+  "exported": "2026-02-24T00:00:00Z",
   "templates": [
-    { ... monster template ... }
+    {
+      "id": "9f6c2e4a-3b71-4d8c-9a5f-2e1b7c6d4a90",
+      "name": "Minotaur",
+      "size": "Large",
+      "type": "Monstrosity",
+      "alignment": "Chaotic Evil",
+      "ac": 14,
+      "acNote": "natural armor",
+      "hpMax": 76,
+      "hpFormula": "9d10+27",
+      "speed": "40 ft.",
+      "cr": "3",
+      "abilities": {
+        "str": 18,
+        "dex": 11,
+        "con": 16,
+        "int": 6,
+        "wis": 16,
+        "cha": 9
+      },
+      "savingThrows": [],
+      "skills": [
+        { "name": "Perception", "bonus": 7 }
+      ],
+      "damageResistances": "",
+      "damageImmunities": "",
+      "damageVulnerabilities": "",
+      "conditionImmunities": "",
+      "senses": "Darkvision 60 ft.",
+      "passivePerception": null,
+      "languages": "Abyssal",
+      "initBonus": 0,
+      "initAdvantage": false,
+      "critRange": 20,
+      "multiattack": "",
+      "attacks": [
+        {
+          "name": "Greataxe",
+          "bonus": 6,
+          "note": "reach 5 ft., one target.",
+          "desc": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 17 (2d12 + 4) slashing damage.",
+          "damages": [
+            { "dice": "2d12+4", "type": "slashing", "note": "" }
+          ]
+        },
+        {
+          "name": "Gore",
+          "bonus": 6,
+          "note": "reach 5 ft., one target.",
+          "desc": "Melee Weapon Attack: +6 to hit, reach 5 ft., one target. Hit: 13 (2d8 + 4) piercing damage.",
+          "damages": [
+            { "dice": "2d8+4", "type": "piercing", "note": "" }
+          ]
+        }
+      ],
+      "features": [
+        {
+          "name": "Charge",
+          "desc": "If the minotaur moves at least 10 feet straight toward a target and then hits it with a gore attack on the same turn, the target takes an extra 9 (2d8) piercing damage. If the target is a creature, it must succeed on a DC 14 Strength saving throw or be pushed up to 10 feet away and knocked prone.",
+          "recharge": null,
+          "uses": null,
+          "usesMax": null
+        },
+        {
+          "name": "Labyrinthine Recall",
+          "desc": "The minotaur can perfectly recall any path it has traveled.",
+          "recharge": null,
+          "uses": null,
+          "usesMax": null
+        },
+        {
+          "name": "Reckless",
+          "desc": "At the start of its turn, the minotaur can gain advantage on all melee weapon attack rolls it makes during that turn, but attack rolls against it have advantage until the start of its next turn.",
+          "recharge": null,
+          "uses": null,
+          "usesMax": null
+        }
+      ],
+      "legendaryActionBudget": 0,
+      "legendaryActions": [],
+      "legendaryResistances": 0,
+      "lairActions": [],
+      "source": "Basic Rules 2014 p145",
+      "gear": "Greataxe",
+      "tactics": "The minotaur relies on brute force and aggression. It uses Charge whenever possible, moving at least 10 feet before making a gore attack to deal extra damage and attempt to push and knock a target prone. It uses Reckless at the start of its turn when confident it can overwhelm its foes quickly, trading defense for offense. It focuses on the nearest creature, pursuing relentlessly through twisting terrain thanks to Labyrinthine Recall.",
+      "playerDescription": "Their fur stained with the blood of fallen foes, minotaurs are massive, bull-headed humanoids whose roar is a savage battle cry that all civilized creatures fear.",
+      "dmDescription": "A minotaur's roar is a savage battle cry that most civilized creatures fear. Born into the mortal realm by demonic rites, minotaurs are savage conquerors and carnivores that live for the hunt. Their brown or black fur is stained with the blood of fallen foes, and they carry the stench of death."
+    }
   ]
-}
-```
-
-The `templates` array can contain one or more monster templates. When importing, EncounterManager reads this array and adds each template to your library (skipping duplicates by ID).
-
-## Monster Template Object
-
-```json
-{
-  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "name": "Minotaur",
-  "size": "Large",
-  "type": "Monstrosity",
-  "alignment": "Chaotic Evil",
-  "ac": 14,
-  "acNote": "natural armor",
-  "hpMax": 76,
-  "hpFormula": "9d10+27",
-  "speed": "40 ft.",
-  "cr": "3",
-  "abilities": {
-    "str": 18,
-    "dex": 11,
-    "con": 16,
-    "int": 6,
-    "wis": 16,
-    "cha": 9
-  },
-  "savingThrows": [],
-  "skills": [
-    { "name": "Perception", "bonus": 7 }
-  ],
-  "damageResistances": "",
-  "damageImmunities": "",
-  "damageVulnerabilities": "",
-  "conditionImmunities": "",
-  "senses": "darkvision 60 ft.",
-  "passivePerception": null,
-  "languages": "Abyssal",
-  "initBonus": 0,
-  "initAdvantage": false,
-  "critRange": 20,
-  "multiattack": "One gore attack and one greataxe attack",
-  "attacks": [
-    {
-      "name": "Greataxe",
-      "bonus": 6,
-      "note": "",
-      "damages": [
-        { "dice": "2d12+4", "type": "slashing", "note": "" }
-      ]
-    },
-    {
-      "name": "Gore",
-      "bonus": 6,
-      "note": "",
-      "damages": [
-        { "dice": "2d8+4", "type": "piercing", "note": "" }
-      ]
-    }
-  ],
-  "features": [
-    {
-      "name": "Charge",
-      "desc": "If the minotaur moves at least 10 feet straight toward a target and then hits it with a gore attack on the same turn, the target takes an extra 2d8 piercing damage.",
-      "recharge": null,
-      "uses": null,
-      "usesMax": null
-    },
-    {
-      "name": "Reckless",
-      "desc": "At the start of its turn, the minotaur can gain advantage on all melee weapon attack rolls during that turn, but attack rolls against it have advantage until the start of its next turn.",
-      "recharge": null,
-      "uses": null,
-      "usesMax": null
-    }
-  ],
-  "legendaryActionBudget": 0,
-  "legendaryActions": [],
-  "legendaryResistances": 0,
-  "lairActions": [],
-  "source": "MM 2014 p223",
-  "gear": "greataxe",
-  "tactics": "",
-  "playerDescription": "",
-  "dmDescription": ""
 }
 ```
 
@@ -347,11 +348,11 @@ Include trigger conditions in the `desc` text so the DM knows when the ability a
 
 ### With AI
 
-1. Export an existing monster to get a working example
-2. Decompress it with [SquishText](https://promptferret.github.io/SquishText/)
-3. Give the JSON to an AI (ChatGPT, Claude, etc.) with instructions like "Create a CR 5 fire elemental in this same format"
-4. Make sure the AI generates a new UUID for the `id` field
-5. Wrap in the export envelope, compress, and import
+1. Give this document to an AI (ChatGPT, Claude, etc.) so it has the full field reference
+2. Optionally export an existing monster, decompress with [SquishText](https://promptferret.github.io/SquishText/), and include it as a working example -- this helps the AI see fields your exported monster may not use (like legendary actions or lair actions)
+3. Ask the AI to create your monster (e.g., "Create a CR 5 fire elemental in this format")
+4. Make sure each monster has a unique UUID for the `id` field
+5. Compress with [SquishText](https://promptferret.github.io/SquishText/) and import into EncounterManager
 6. You can include multiple templates in the `templates` array to bulk-create monsters
 
 ### Multiple Monsters

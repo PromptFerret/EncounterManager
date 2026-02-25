@@ -9,6 +9,10 @@ EncounterManager is a D&D combat manager for DMs. Build monster stat blocks, org
 
 ## Quick Start
 
+When you first open EncounterManager with no data, a **Getting Started** guide walks you through the basics and offers a **Load Sample Data** button that imports a ready-made set of monsters, a party, an encounter, and an active combat so you can explore right away. You can reopen the guide anytime from the "Getting Started" link in the footer.
+
+Once you're ready to build your own:
+
 1. **Create a monster** - Go to the Monsters tab and click "+ New Monster". Fill in the stat block and save.
 2. **Create a party** - Go to the Parties tab and click "+ New Party". Name it and add your players.
 3. **Build an encounter** - Go to the Encounters tab and click "+ New Encounter". Search for monsters and set quantities.
@@ -28,10 +32,10 @@ EncounterManager is a D&D combat manager for DMs. Build monster stat blocks, org
 
 ## Example Data
 
-Download example files from the [examples folder on GitHub](https://github.com/PromptFerret/EncounterManager/tree/main/examples) and import them to see the tool in action:
+The **Load Sample Data** button in the Getting Started guide imports the same example data below directly into the app. You can also download the files from the [examples folder on GitHub](https://github.com/PromptFerret/EncounterManager/tree/main/examples) to import manually:
 
-- **mythborne-chronicles.squishtext** - Full backup with 3 monsters, a party, an encounter, and an active combat. Use "Load Backup" to import.
-- **minotaur.squishtext**, **griffin.squishtext**, **basilisk.squishtext** - Individual monster templates. Use "Import Monster" to import.
+- **ambush-at-thornhollow.squishtext** - Full backup with 4 goblin monsters, a party, an encounter, and an active combat. Use "Load Backup" to import.
+- **Goblin Boss**, **Goblin Hexer**, **Goblin Minion**, **Goblin Warrior** - Individual monster templates (MM 2024). Use "Import Monster" to import.
 
 ## Your Data
 
