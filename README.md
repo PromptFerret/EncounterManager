@@ -4,6 +4,7 @@ D&D encounter manager and initiative tracker for DMs running combat. Build monst
 
 **Live:** [promptferret.github.io/EncounterManager](https://promptferret.github.io/EncounterManager/)
 **Docs:** [EncounterManager Documentation](https://promptferret.github.io/MarkdownSite/?chrome=false#../../EncounterManager/docs/INDEX)
+**Discord:** [Join our Discord](https://discord.gg/xed4bCazym) for support, discussion, and to share and download community monsters.
 
 ## The DM's Combat Dashboard
 

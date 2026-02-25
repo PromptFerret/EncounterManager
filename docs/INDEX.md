@@ -5,6 +5,7 @@
 EncounterManager is a D&D combat manager for DMs. Build monster stat blocks, organize parties, construct encounters, and run combat with HP tracking, attack rolling, conditions, concentration, and legendary actions - all in your browser.
 
 **Live app:** [promptferret.github.io/EncounterManager](https://promptferret.github.io/EncounterManager/)
+**Discord:** [Join our Discord](https://discord.gg/xed4bCazym) for support, discussion, and to share and download community monsters.
 
 ## Quick Start
 
