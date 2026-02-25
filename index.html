@@ -5946,6 +5946,25 @@ function templateToCanvas(t) {
     const nameW = ctx.measureText(name + ' ').width;
     ctx.font = BODY_FONT;
     const descWords = (desc || '').split(/\s+/).filter(function(w) { return w; });
+    // If bold name itself exceeds content width, wrap it
+    if (nameW > CW) {
+      const nameWrapped = wrapCanvasText(ctx, name, CW, BOLD_FONT);
+      for (let i = 0; i < nameWrapped.length; i++) {
+        y += LINE_H;
+        ctx.font = BOLD_FONT;
+        ctx.fillText(nameWrapped[i], PAD, y);
+      }
+      if (descWords.length > 0) {
+        const allDesc = descWords.join(' ');
+        const wrapped = wrapCanvasText(ctx, allDesc, CW, BODY_FONT);
+        for (let i = 0; i < wrapped.length; i++) {
+          y += LINE_H;
+          ctx.font = BODY_FONT;
+          ctx.fillText(wrapped[i], PAD, y);
+        }
+      }
+      return;
+    }
     if (descWords.length === 0) {
       y += LINE_H;
       ctx.font = BOLD_FONT;
@@ -5988,13 +6007,29 @@ function templateToCanvas(t) {
   }
 
   // ── 1. Name header bar ──
-  ctx.font = 'bold 18px Georgia, "Times New Roman", serif';
-  const nameH = 30;
-  ctx.fillStyle = RED;
-  ctx.fillRect(0, 0, W, nameH);
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillText(t.name || 'Unnamed', PAD, 21);
-  y = nameH;
+  const NAME_FONT = 'bold 18px Georgia, "Times New Roman", serif';
+  ctx.font = NAME_FONT;
+  const monsterName = t.name || 'Unnamed';
+  const nameTextW = ctx.measureText(monsterName).width;
+  if (nameTextW > CW) {
+    const nameLines = wrapCanvasText(ctx, monsterName, CW, NAME_FONT);
+    const nameH = 12 + nameLines.length * 22;
+    ctx.fillStyle = RED;
+    ctx.fillRect(0, 0, W, nameH);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = NAME_FONT;
+    for (let i = 0; i < nameLines.length; i++) {
+      ctx.fillText(nameLines[i], PAD, 21 + i * 22);
+    }
+    y = nameH;
+  } else {
+    const nameH = 30;
+    ctx.fillStyle = RED;
+    ctx.fillRect(0, 0, W, nameH);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(monsterName, PAD, 21);
+    y = nameH;
+  }
 
   // Subheader: size type, alignment
   const subParts = [];
@@ -6003,10 +6038,19 @@ function templateToCanvas(t) {
   let subLine = subParts.join(' ');
   if (t.alignment) subLine += (subLine ? ', ' : '') + t.alignment;
   if (subLine) {
-    y += 14;
     ctx.font = ITALIC_FONT;
     ctx.fillStyle = BLACK;
-    ctx.fillText(subLine, PAD, y);
+    const subW = ctx.measureText(subLine).width;
+    if (subW > CW) {
+      const subLines = wrapCanvasText(ctx, subLine, CW, ITALIC_FONT);
+      for (let i = 0; i < subLines.length; i++) {
+        y += 14;
+        ctx.fillText(subLines[i], PAD, y);
+      }
+    } else {
+      y += 14;
+      ctx.fillText(subLine, PAD, y);
+    }
     y += 2;
   }
 

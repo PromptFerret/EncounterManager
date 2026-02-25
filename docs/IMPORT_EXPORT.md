@@ -29,7 +29,7 @@ This means restoring a backup will never overwrite your current data. It only ad
 
 ### Exporting a Single Monster
 
-On the Monsters tab, each monster card has an **Export** button. Click it to download a `.squishtext` file named after the monster (e.g., `Minotaur.squishtext`).
+On the Monsters tab, each monster card has an **Export** button. Click it to download a `.squishtext` file. The filename includes the monster's name, CR, and source when available (e.g., `Minotaur - CR 3 (MM 2014 p77).squishtext`). If CR or source are not set, they are omitted from the filename.
 
 Share these files with other DMs, keep them as individual backups, or build a personal library outside the browser.
 
@@ -56,6 +56,7 @@ The importer handles single creatures (a top-level JSON object) and multi-creatu
 - Saving throws and skills
 - Damage resistances, immunities, vulnerabilities, and condition immunities
 - Senses, languages, passive perception
+- Source (from 5etools `source` field + page number)
 - Initiative bonus (including advantage detection)
 - Attacks with hit bonus, reach/range, damage dice, and full description text
 - Multiattack text

@@ -33,6 +33,8 @@ The top section has two rows of fields:
 | **CR** | Challenge rating (e.g., "1/4", "3", "15") |
 | **Init Bonus** | Initiative modifier added to d20 rolls |
 | **Init Advantage** | Checkbox - if checked, the monster rolls initiative with advantage |
+| **Source** | Publication reference (e.g., "MM 2014 p166", "Flee, Mortals! p127"). Shown on monster cards and in combat. Included in export filenames. |
+| **Gear** | Equipment the creature carries (e.g., "chain shirt, shield, scimitar"). Informational - armor and weapons are already reflected in AC and attacks. |
 
 ### Ability Scores
 
@@ -97,7 +99,7 @@ Click **+ Add Feature** to add a trait or ability. Each feature has:
 
 **Resistances** sets the number of legendary resistances.
 
-When Actions/Round is greater than 0, you can add legendary actions with **+ Add Legendary Action**:
+Click **+ Add Legendary Action** to add legendary actions:
 - **Name** (e.g., "Detect", "Tail Attack")
 - **Cost** (how many legendary actions it costs, typically 1 or 2)
 - **Description** - full text, supports clickable dice notation

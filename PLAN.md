@@ -950,20 +950,16 @@ Add new fields to monster templates to capture metadata commonly found in publis
 - Add `.card` styling to form editor sections: saving throws, skills, features, legendary actions, lair actions (matching the existing attack card treatment) in both template and combatant editor forms
 - Fix storage indicator: measure actual app data size from serialized state instead of origin-wide `navigator.storage.estimate()` which includes browser cache and inflates on every reload. Quota still from storage estimate.
 - Party editor: refocus player name input after adding a player so users can type multiple names in quick succession without re-clicking
-
-#### Remaining Tasks
-
 - Add `source` and `gear` fields to `newTemplate()` defaults (empty strings)
-- Add inputs to monster template editor form (source: text input, gear: text input)
-- Display in monster list card (subtle, below existing metadata)
-- Display in combat detail panel (under stats or accordion)
-- Include in markdown export
-- Include in image export
-- Include in JSON export (already automatic since templates export as-is)
-- Update 5etools importer to populate `source` from `source`/`page` fields and `gear` from equipment entries if available
-- Update export filenames to include CR and source: `{name} - CR {cr} ({source}).{ext}`. Sanitize filesystem-invalid characters (`/` → `-`). Example: `Goblin Sniper - CR 1-2 (FM).squishtext`. Falls back to just `{name}.{ext}` if cr/source are empty.
+- Add inputs to monster template editor form (2-column row below Speed/CR/Init)
+- Display in monster list card (subtle muted line below meta tags)
+- Display in combat detail panel (alongside Speed/Senses)
+- Include in markdown and image export
+- Update 5etools importer to populate `source` from `m.source` + `m.page` fields
+- Update export filenames to include CR and source: `{name} - CR {cr} ({source}).{ext}` with filesystem-invalid character sanitization
+- Update combatant override editor with source/gear edit fields
 - Update MONSTER_FORMAT.md with new field documentation
-- Update MONSTER_TEMPLATES.md if needed
+- Update MONSTER_TEMPLATES.md, IMPORT_EXPORT.md, CLAUDE.md docs
 - Backward compatible: missing fields treated as empty strings
 
 #### Phase 10 Data Changes
