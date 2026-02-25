@@ -303,7 +303,8 @@ User input flows through `this.value` in onchange handlers (reads from DOM eleme
 - **Phase 8** (done): Export enhancements - markdown export (full stat block to clipboard), image export (canvas-rendered PNG download). Both include all template fields.
 - **Phase 9** (done): Attack descriptions (`desc` field on attacks for special effects text, inline clickable dice) and lair actions (`lairActions[]` array, reference-only display in combat, notification modal on combat start). 5etools importer updated for both.
 - **Phase 10** (done): Template schema enhancements - `source` and `gear` fields on templates, displayed in list/combat/export. Legendary action conditional gate removed (no longer requires Actions/Round to add actions). Card styling on saves/skills/features/legendary/lair sections. Storage indicator fixed (measures app data, not origin-wide). Party input refocus. Export filenames include CR and source.
-- **Phase 11+** (future): CritterDB, Bestiary Builder importers (each in own phase). See `PLAN.md` for details.
+- **Phase 11** (planned): Getting Started modal - onboarding for new users. Auto-shows on empty state, reopenable from footer link. 2x2 card grid (Monsters/Parties/Encounters/Combat) with click-to-detail views. "Load Sample Data" button (empty state only) injects a prebuilt system with monsters, party, encounter, and active combat; stays on current tab after import. Uses `createModal()`, embedded squishtext payload, existing import merge logic.
+- **Phase 12+** (future): CritterDB, Bestiary Builder importers (each in own phase). See `PLAN.md` for details.
 
 ## Development Notes
 

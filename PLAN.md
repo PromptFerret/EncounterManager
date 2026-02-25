@@ -971,13 +971,55 @@ New fields on monster template:
 }
 ```
 
-### Phase 11 - CritterDB Importer
+### Phase 11 - Getting Started Modal
+
+New users landing on EncounterManager see an empty screen with no guidance. This phase adds an onboarding modal that orients new users, explains the workflow, and optionally loads sample data so they can explore a working system immediately.
+
+#### Behavior
+
+- **Auto-show on empty state**: Modal appears on load when all data arrays are empty (no templates, no encounters, no parties, no combats). No preference flag - if data is empty, show it.
+- **Reopenable anytime**: A "Getting Started" link in the footer (next to storage indicator) opens the modal on demand.
+- **"Load Sample Data" button**: Only visible when the system has no data. Hidden when reopened on a system that already has content.
+- **Reminder text**: Both grid view and detail views include: "You can reopen this anytime from the Getting Started link in the footer."
+
+#### Modal Layout
+
+**Grid view (default):** Top info panel with brief overview, then a 2x2 card grid (Monsters, Parties, Encounters, Combat). Each card has a title and 1-2 sentence summary. Below the grid: "Load Sample Data" button (if empty), docs link, footer reminder.
+
+**Detail view (on card click):** Clicking a card replaces modal content with a detail page for that section. Back arrow returns to grid. "Go to [Tab Name]" button closes modal and switches to that tab. Each detail page is self-contained with step-by-step guidance, tips, and a docs link for more depth.
+
+#### Sample Data
+
+- Squishtext payload provided by user, embedded in code
+- Contains monsters, a party, an encounter, and an active combat in round 1
+- Imported via existing merge logic (same as Load Backup)
+- After import: modal closes, user stays on their current tab to explore at their own pace
+
+#### Implementation
+
+- `showGettingStarted()` - renders modal with grid view, checks empty state for sample data button
+- `showGettingStartedDetail(section)` - replaces modal content with detail view
+- `loadSampleData()` - decodes embedded payload, imports via merge logic, closes modal, stays on current tab
+- `isDataEmpty()` - returns true if all state arrays are empty
+- Uses existing `createModal()` helper, modal ID `gettingStartedModal`
+- Footer link next to storage indicator
+- Init hook: in `load().then(...)`, check `isDataEmpty()` and call `showGettingStarted()` if true
+- CSS: `.getting-started-grid`, `.getting-started-card`, `.getting-started-detail`, `.getting-started-back`
+
+#### Files Modified
+
+- `index.html` - CSS, HTML footer link, JS functions, init hook
+- `CLAUDE.md` - phase status, code map updates
+- `PLAN.md` - this entry
+- `docs/INDEX.md` - mention Getting Started modal in quick start
+
+### Phase 12 - CritterDB Importer
 - Discovery: investigate CritterDB JSON export format
 - Data mapping: map CritterDB fields to canonical template schema
 - Pure function: `importCritterDB(json) → template[]`
 - UI: integrate into Import Monster modal
 
-### Phase 12 - Bestiary Builder Importer
+### Phase 13 - Bestiary Builder Importer
 - Discovery: investigate Bestiary Builder JSON export format
 - Data mapping: map fields to canonical template schema
 - Pure function: `importBestiaryBuilder(json) → template[]`
